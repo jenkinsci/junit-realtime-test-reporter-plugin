@@ -136,7 +136,7 @@ public class RealtimeTestResultAction extends AbstractTestResultAction<RealtimeT
 
             final AbstractBuild<?, ?> build = (AbstractBuild<?, ?>) run;
 
-            if (getArchiver(build) == null) return;
+            if (!isApplicable(build)) return;
 
             build.addAction(new RealtimeTestResultAction(build));
         }
@@ -147,6 +147,16 @@ public class RealtimeTestResultAction extends AbstractTestResultAction<RealtimeT
             final AbstractBuild<?, ?> build = (AbstractBuild<?, ?>) run;
 
             detachActionFrom(build);
+        }
+
+        private boolean isApplicable(final AbstractBuild<?, ?> build) {
+
+            return getArchiver(build) != null && getConfig(build).reportInRealtime;
+        }
+
+        private PerJobConfiguration getConfig(AbstractBuild<?, ?> build) {
+
+            return PerJobConfiguration.getConfig(build.getProject());
         }
 
         private static void detachActionFrom(final AbstractBuild<?, ?> build) {
