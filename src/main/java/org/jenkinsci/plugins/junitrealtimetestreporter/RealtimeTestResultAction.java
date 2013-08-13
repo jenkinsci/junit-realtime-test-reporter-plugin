@@ -25,9 +25,12 @@ package org.jenkinsci.plugins.junitrealtimetestreporter;
 
 import hudson.AbortException;
 import hudson.Extension;
+import hudson.matrix.MatrixRun;
+import hudson.matrix.MatrixBuild;
 import hudson.model.Action;
 import hudson.model.TaskListener;
 import hudson.model.AbstractBuild;
+import hudson.model.AbstractProject;
 import hudson.model.Run;
 import hudson.model.listeners.RunListener;
 import hudson.tasks.junit.JUnitParser;
@@ -128,63 +131,6 @@ public class RealtimeTestResultAction extends AbstractTestResultAction<RealtimeT
         return super.getIconFileName();
     }
 
-    @Extension
-    public static class Attacher extends RunListener<Run<?, ?>> {
-
-        @Override
-        public void onStarted(Run<?, ?> run, TaskListener listener) {
-
-            final AbstractBuild<?, ?> build = (AbstractBuild<?, ?>) run;
-
-            if (!isApplicable(build)) return;
-
-            build.addAction(new RealtimeTestResultAction(build));
-        }
-
-        @Override
-        public void onFinalized(Run<?, ?> run) {
-
-            final AbstractBuild<?, ?> build = (AbstractBuild<?, ?>) run;
-
-            detachActionFrom(build);
-        }
-
-        private boolean isApplicable(final AbstractBuild<?, ?> build) {
-
-            return getArchiver(build) != null && getConfig(build).reportInRealtime;
-        }
-
-        private PerJobConfiguration getConfig(AbstractBuild<?, ?> build) {
-
-            return PerJobConfiguration.getConfig(build.getProject());
-        }
-
-        private static void detachActionFrom(final AbstractBuild<?, ?> build) {
-
-            final List<Action> actions = build.getActions();
-
-            final Iterator<Action> iterator = actions.iterator();
-            boolean removed = false;
-            while (iterator.hasNext()) {
-
-                final Action action = iterator.next();
-                if (action instanceof RealtimeTestResultAction) {
-
-                    LOGGER.info("Detaching RealtimeTestResultAction from " + build);
-                    actions.remove(action);
-                    ((RealtimeTestResultAction) action).result = null;
-                    removed = true;
-                }
-            }
-
-            if (removed) try {
-                build.save();
-            } catch (IOException ex) {
-                throw new AssertionError(ex);
-            }
-        }
-    }
-
     private static TestResult parse(final RealtimeTestResultAction action) {
 
         final JUnitResultArchiver archiver = getArchiver(action.owner);
@@ -215,6 +161,77 @@ public class RealtimeTestResultAction extends AbstractTestResultAction<RealtimeT
 
     private static JUnitResultArchiver getArchiver(AbstractBuild<?, ?> build) {
 
-        return build.getProject().getPublishersList().get(JUnitResultArchiver.class);
+        return getProject(build).getPublishersList().get(JUnitResultArchiver.class);
+    }
+
+    private static AbstractProject<?, ?> getProject(AbstractBuild<?, ?> build) {
+
+        if (build instanceof MatrixBuild) return build.getProject();
+        if (build instanceof MatrixRun) return getProject(((MatrixRun) build).getRootBuild());
+
+        return build.getProject();
+    }
+
+    @Extension
+    public static class Attacher extends RunListener<Run<?, ?>> {
+
+        @Override
+        public void onStarted(Run<?, ?> run, TaskListener listener) {
+
+            final AbstractBuild<?, ?> build = (AbstractBuild<?, ?>) run;
+
+            if (!isApplicable(build)) return;
+
+            build.addAction(new RealtimeTestResultAction(build));
+        }
+
+        @Override
+        public void onFinalized(Run<?, ?> run) {
+
+            final AbstractBuild<?, ?> build = (AbstractBuild<?, ?>) run;
+
+            detachActionFrom(build);
+        }
+
+        private boolean isApplicable(final AbstractBuild<?, ?> build) {
+
+            // There is AggregatedTestResultAction already but it does not provide realtime results
+            if (build instanceof MatrixBuild) return false;
+
+            if (getArchiver(build) == null) return false;
+            if (!getConfig(build).reportInRealtime) return false;
+
+            return true;
+        }
+
+        private PerJobConfiguration getConfig(AbstractBuild<?, ?> build) {
+
+            return PerJobConfiguration.getConfig(getProject(build));
+        }
+
+        private static void detachActionFrom(final AbstractBuild<?, ?> build) {
+
+            final List<Action> actions = build.getActions();
+
+            final Iterator<Action> iterator = actions.iterator();
+            boolean removed = false;
+            while (iterator.hasNext()) {
+
+                final Action action = iterator.next();
+                if (action instanceof RealtimeTestResultAction) {
+
+                    LOGGER.info("Detaching RealtimeTestResultAction from " + build);
+                    actions.remove(action);
+                    ((RealtimeTestResultAction) action).result = null;
+                    removed = true;
+                }
+            }
+
+            if (removed) try {
+                build.save();
+            } catch (IOException ex) {
+                throw new AssertionError(ex);
+            }
+        }
     }
 }
