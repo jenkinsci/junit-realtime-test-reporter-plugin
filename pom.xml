@@ -28,7 +28,16 @@
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <surefire.useFile>false</surefire.useFile>
+    <core.version>1.480.3</core.version>
   </properties>
+
+  <dependencies>
+    <dependency>
+      <groupId>org.jenkins-ci.main</groupId>
+      <artifactId>maven-plugin</artifactId>
+      <version>${core.version}</version>
+    </dependency>
+  </dependencies>
 
   <repositories>
     <repository>

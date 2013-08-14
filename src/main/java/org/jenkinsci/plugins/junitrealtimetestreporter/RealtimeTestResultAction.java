@@ -27,6 +27,7 @@ import hudson.AbortException;
 import hudson.Extension;
 import hudson.matrix.MatrixRun;
 import hudson.matrix.MatrixBuild;
+import hudson.maven.MavenModuleSetBuild;
 import hudson.model.Action;
 import hudson.model.TaskListener;
 import hudson.model.AbstractBuild;
@@ -45,6 +46,7 @@ import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+import org.kohsuke.stapler.HttpRedirect;
 import org.kohsuke.stapler.StaplerProxy;
 
 /**
@@ -72,13 +74,6 @@ public class RealtimeTestResultAction extends AbstractTestResultAction<RealtimeT
 
     @Override
     public TestResult getResult() {
-
-        if (!owner.isBuilding()) {
-            LOGGER.warning("Dangling RealtimeTestResultAction on " + owner + ". Probably not finalized correctly.");
-            Attacher.detachActionFrom(owner);
-            final TestResultAction a = owner.getAction(TestResultAction.class);
-            return a == null ? null : a.getResult();
-        }
 
         // Refresh every 1/100 of a job estimated duration but not more often than every 5 seconds
         final long thrashold = Math.max(5000, owner.getEstimatedDuration() / 100);
@@ -108,6 +103,12 @@ public class RealtimeTestResultAction extends AbstractTestResultAction<RealtimeT
 
     public TestResult getTarget() {
 
+        if (!owner.isBuilding()) {
+            LOGGER.warning("Dangling RealtimeTestResultAction on " + owner + ". Probably not finalized correctly.");
+            Attacher.detachActionFrom(owner);
+            throw new HttpRedirect(owner.getUrl());
+        }
+
         if (getResult() != null) return getResult();
 
         return new NullTestResult(this);
@@ -122,7 +123,7 @@ public class RealtimeTestResultAction extends AbstractTestResultAction<RealtimeT
     @Override
     public String getUrlName() {
 
-        return super.getUrlName();
+        return "realtimeTestReport";
     }
 
     @Override
@@ -161,6 +162,8 @@ public class RealtimeTestResultAction extends AbstractTestResultAction<RealtimeT
 
     private static JUnitResultArchiver getArchiver(AbstractBuild<?, ?> build) {
 
+        if (build instanceof MavenModuleSetBuild) return new DummyArchiver();
+
         return getProject(build).getPublishersList().get(JUnitResultArchiver.class);
     }
 
@@ -198,8 +201,11 @@ public class RealtimeTestResultAction extends AbstractTestResultAction<RealtimeT
             // There is AggregatedTestResultAction already but it does not provide realtime results
             if (build instanceof MatrixBuild) return false;
 
-            if (getArchiver(build) == null) return false;
             if (!getConfig(build).reportInRealtime) return false;
+
+            if (build instanceof MavenModuleSetBuild) return true;
+
+            if (getArchiver(build) == null) return false;
 
             return true;
         }
