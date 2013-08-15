@@ -25,6 +25,7 @@ package org.jenkinsci.plugins.junitrealtimetestreporter;
 
 import hudson.AbortException;
 import hudson.Extension;
+import hudson.Util;
 import hudson.matrix.MatrixRun;
 import hudson.matrix.MatrixBuild;
 import hudson.maven.MavenModuleSetBuild;
@@ -41,6 +42,7 @@ import hudson.tasks.test.AbstractTestResultAction;
 import hudson.tasks.test.TestResult;
 
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
 import java.util.logging.Level;
@@ -135,11 +137,24 @@ public class RealtimeTestResultAction extends AbstractTestResultAction<RealtimeT
     private static TestResult parse(final RealtimeTestResultAction action) {
 
         final JUnitResultArchiver archiver = getArchiver(action.owner);
+        String glob = archiver.getTestResults();
+        // Ensure the GLOB work recursively
+        if (action.owner instanceof MatrixBuild) {
+
+            final String[] independentChunks = glob.split("[, ]+");
+            for (int i = 0; i < independentChunks.length; i++) {
+
+                independentChunks[i] = "**/" + independentChunks[i];
+            }
+
+            glob = Util.join(Arrays.asList(independentChunks), ", ");
+        }
+
         try {
 
             final long started = System.currentTimeMillis();
             final TestResult result = new JUnitParser(archiver.isKeepLongStdio())
-                    .parse(archiver.getTestResults(), action.owner, null, null)
+                    .parse(glob, action.owner, null, null)
             ;
             LOGGER.log(Level.INFO, "Parsing took {0} ms", System.currentTimeMillis() - started);
 
@@ -197,9 +212,6 @@ public class RealtimeTestResultAction extends AbstractTestResultAction<RealtimeT
         }
 
         private boolean isApplicable(final AbstractBuild<?, ?> build) {
-
-            // There is AggregatedTestResultAction already but it does not provide realtime results
-            if (build instanceof MatrixBuild) return false;
 
             if (!getConfig(build).reportInRealtime) return false;
 
