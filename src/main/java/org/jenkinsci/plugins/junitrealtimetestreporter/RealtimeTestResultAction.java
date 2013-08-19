@@ -28,6 +28,7 @@ import hudson.Extension;
 import hudson.Util;
 import hudson.matrix.MatrixRun;
 import hudson.matrix.MatrixBuild;
+import hudson.maven.MavenBuild;
 import hudson.maven.MavenModuleSetBuild;
 import hudson.model.Action;
 import hudson.model.TaskListener;
@@ -107,7 +108,7 @@ public class RealtimeTestResultAction extends AbstractTestResultAction<RealtimeT
 
         if (!owner.isBuilding()) {
             LOGGER.warning("Dangling RealtimeTestResultAction on " + owner + ". Probably not finalized correctly.");
-            Attacher.detachActionFrom(owner);
+            detachFrom(owner);
             throw new HttpRedirect(owner.getUrl());
         }
 
@@ -177,17 +178,47 @@ public class RealtimeTestResultAction extends AbstractTestResultAction<RealtimeT
 
     private static JUnitResultArchiver getArchiver(AbstractBuild<?, ?> build) {
 
-        if (build instanceof MavenModuleSetBuild) return new DummyArchiver();
+        if (build instanceof MavenModuleSetBuild || build instanceof MavenBuild) return new DummyArchiver();
 
         return getProject(build).getPublishersList().get(JUnitResultArchiver.class);
     }
 
     private static AbstractProject<?, ?> getProject(AbstractBuild<?, ?> build) {
 
-        if (build instanceof MatrixBuild) return build.getProject();
+        if (build instanceof MavenBuild) return getProject(((MavenBuild) build).getRootBuild());
         if (build instanceof MatrixRun) return getProject(((MatrixRun) build).getRootBuild());
 
         return build.getProject();
+    }
+
+    /*package*/ static PerJobConfiguration getConfig(AbstractBuild<?, ?> build) {
+
+        return PerJobConfiguration.getConfig(getProject(build));
+    }
+
+    /*package*/ static void detachFrom(final AbstractBuild<?, ?> build) {
+
+        final List<Action> actions = build.getActions();
+
+        final Iterator<Action> iterator = actions.iterator();
+        boolean removed = false;
+        while (iterator.hasNext()) {
+
+            final Action action = iterator.next();
+            if (action instanceof RealtimeTestResultAction) {
+
+                LOGGER.info("Detaching RealtimeTestResultAction from " + build);
+                actions.remove(action);
+                ((RealtimeTestResultAction) action).result = null;
+                removed = true;
+            }
+        }
+
+        if (removed) try {
+            build.save();
+        } catch (IOException ex) {
+            throw new AssertionError(ex);
+        }
     }
 
     @Extension
@@ -208,10 +239,10 @@ public class RealtimeTestResultAction extends AbstractTestResultAction<RealtimeT
 
             final AbstractBuild<?, ?> build = (AbstractBuild<?, ?>) run;
 
-            detachActionFrom(build);
+            detachFrom(build);
         }
 
-        private boolean isApplicable(final AbstractBuild<?, ?> build) {
+        private static boolean isApplicable(final AbstractBuild<?, ?> build) {
 
             if (!getConfig(build).reportInRealtime) return false;
 
@@ -220,36 +251,6 @@ public class RealtimeTestResultAction extends AbstractTestResultAction<RealtimeT
             if (getArchiver(build) == null) return false;
 
             return true;
-        }
-
-        private PerJobConfiguration getConfig(AbstractBuild<?, ?> build) {
-
-            return PerJobConfiguration.getConfig(getProject(build));
-        }
-
-        private static void detachActionFrom(final AbstractBuild<?, ?> build) {
-
-            final List<Action> actions = build.getActions();
-
-            final Iterator<Action> iterator = actions.iterator();
-            boolean removed = false;
-            while (iterator.hasNext()) {
-
-                final Action action = iterator.next();
-                if (action instanceof RealtimeTestResultAction) {
-
-                    LOGGER.info("Detaching RealtimeTestResultAction from " + build);
-                    actions.remove(action);
-                    ((RealtimeTestResultAction) action).result = null;
-                    removed = true;
-                }
-            }
-
-            if (removed) try {
-                build.save();
-            } catch (IOException ex) {
-                throw new AssertionError(ex);
-            }
         }
     }
 }
