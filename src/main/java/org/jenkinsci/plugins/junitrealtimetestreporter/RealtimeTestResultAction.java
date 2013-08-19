@@ -24,18 +24,14 @@
 package org.jenkinsci.plugins.junitrealtimetestreporter;
 
 import hudson.AbortException;
-import hudson.Extension;
 import hudson.Util;
 import hudson.matrix.MatrixRun;
 import hudson.matrix.MatrixBuild;
 import hudson.maven.MavenBuild;
 import hudson.maven.MavenModuleSetBuild;
 import hudson.model.Action;
-import hudson.model.TaskListener;
 import hudson.model.AbstractBuild;
 import hudson.model.AbstractProject;
-import hudson.model.Run;
-import hudson.model.listeners.RunListener;
 import hudson.tasks.junit.JUnitParser;
 import hudson.tasks.junit.TestResultAction;
 import hudson.tasks.junit.JUnitResultArchiver;
@@ -85,7 +81,7 @@ public class RealtimeTestResultAction extends AbstractTestResultAction<RealtimeT
             return result;
         }
 
-        result = parse(this);
+        result = parse();
         updated = System.currentTimeMillis();
         return result;
     }
@@ -135,31 +131,19 @@ public class RealtimeTestResultAction extends AbstractTestResultAction<RealtimeT
         return super.getIconFileName();
     }
 
-    private static TestResult parse(final RealtimeTestResultAction action) {
+    private TestResult parse() {
 
-        final JUnitResultArchiver archiver = getArchiver(action.owner);
-        String glob = archiver.getTestResults();
-        // Ensure the GLOB work recursively
-        if (action.owner instanceof MatrixBuild) {
-
-            final String[] independentChunks = glob.split("[, ]+");
-            for (int i = 0; i < independentChunks.length; i++) {
-
-                independentChunks[i] = "**/" + independentChunks[i];
-            }
-
-            glob = Util.join(Arrays.asList(independentChunks), ", ");
-        }
+        final JUnitResultArchiver archiver = getArchiver(this.owner);
 
         try {
 
             final long started = System.currentTimeMillis();
             final TestResult result = new JUnitParser(archiver.isKeepLongStdio())
-                    .parse(glob, action.owner, null, null)
+                    .parse(getGlob(archiver), this.owner, null, null)
             ;
             LOGGER.log(Level.INFO, "Parsing took {0} ms", System.currentTimeMillis() - started);
 
-            result.setParentAction(action);
+            result.setParentAction(this);
             return result;
         } catch (AbortException ex) {
             // Thrown when there are no reports or no workspace witch is normal
@@ -176,7 +160,25 @@ public class RealtimeTestResultAction extends AbstractTestResultAction<RealtimeT
         return null;
     }
 
-    private static JUnitResultArchiver getArchiver(AbstractBuild<?, ?> build) {
+    private String getGlob(final JUnitResultArchiver archiver) {
+
+        String glob = archiver.getTestResults();
+        // Ensure the GLOB work recursively
+        if (this.owner instanceof MatrixBuild) {
+
+            final String[] independentChunks = glob.split("[, ]+");
+            for (int i = 0; i < independentChunks.length; i++) {
+
+                independentChunks[i] = "**/" + independentChunks[i];
+            }
+
+            glob = Util.join(Arrays.asList(independentChunks), ", ");
+        }
+
+        return glob;
+    }
+
+    /*package*/ static JUnitResultArchiver getArchiver(AbstractBuild<?, ?> build) {
 
         if (build instanceof MavenModuleSetBuild || build instanceof MavenBuild) return new DummyArchiver();
 
@@ -218,39 +220,6 @@ public class RealtimeTestResultAction extends AbstractTestResultAction<RealtimeT
             build.save();
         } catch (IOException ex) {
             throw new AssertionError(ex);
-        }
-    }
-
-    @Extension
-    public static class Attacher extends RunListener<Run<?, ?>> {
-
-        @Override
-        public void onStarted(Run<?, ?> run, TaskListener listener) {
-
-            final AbstractBuild<?, ?> build = (AbstractBuild<?, ?>) run;
-
-            if (!isApplicable(build)) return;
-
-            build.addAction(new RealtimeTestResultAction(build));
-        }
-
-        @Override
-        public void onFinalized(Run<?, ?> run) {
-
-            final AbstractBuild<?, ?> build = (AbstractBuild<?, ?>) run;
-
-            detachFrom(build);
-        }
-
-        private static boolean isApplicable(final AbstractBuild<?, ?> build) {
-
-            if (!getConfig(build).reportInRealtime) return false;
-
-            if (build instanceof MavenModuleSetBuild) return true;
-
-            if (getArchiver(build) == null) return false;
-
-            return true;
         }
     }
 }
