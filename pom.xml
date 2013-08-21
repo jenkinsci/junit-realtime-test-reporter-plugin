@@ -29,7 +29,7 @@
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <surefire.useFile>false</surefire.useFile>
-    <core.version>1.480.3</core.version>
+    <core.version>1.480</core.version>
   </properties>
 
   <dependencies>
