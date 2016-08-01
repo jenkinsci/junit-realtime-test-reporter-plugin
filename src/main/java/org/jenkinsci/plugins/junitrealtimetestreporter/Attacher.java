@@ -40,7 +40,9 @@ public class Attacher extends RunListener<Run<?, ?>> {
 
     @Override
     public void onStarted(Run<?, ?> run, TaskListener listener) {
-
+        if ( !( run instanceof AbstractBuild )) {
+            return;
+        }
         final AbstractBuild<?, ?> build = (AbstractBuild<?, ?>) run;
 
         if (!isApplicable(build)) return;
