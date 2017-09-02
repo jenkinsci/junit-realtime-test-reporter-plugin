@@ -43,11 +43,14 @@ import org.jenkinsci.plugins.structs.describable.UninstantiatedDescribable;
 import org.jenkinsci.plugins.workflow.FilePathUtils;
 import org.jenkinsci.plugins.workflow.actions.ArgumentsAction;
 import org.jenkinsci.plugins.workflow.actions.WorkspaceAction;
+import org.jenkinsci.plugins.workflow.flow.FlowExecution;
+import org.jenkinsci.plugins.workflow.flow.FlowExecutionOwner;
 import org.jenkinsci.plugins.workflow.flow.GraphListener;
 import org.jenkinsci.plugins.workflow.graph.BlockEndNode;
 import org.jenkinsci.plugins.workflow.graph.BlockStartNode;
 import org.jenkinsci.plugins.workflow.graph.FlowNode;
 import org.jenkinsci.plugins.workflow.graph.StepNode;
+import org.jenkinsci.plugins.workflow.graphanalysis.DepthFirstScanner;
 
 @Extension
 public class PipelineAttacher implements GraphListener {
@@ -79,26 +82,44 @@ public class PipelineAttacher implements GraphListener {
                         return;
                     }
                     Run<?, ?> last = job.getLastSuccessfulBuild();
-                    if (last == null) {
+                    if (last == null || !(last instanceof FlowExecutionOwner.Executable)) {
                         return;
                     }
-                    // TODO look for all junit on last, and collect all patterns
-                    if (node instanceof StepNode && ((StepNode) node).getDescriptor().getFunctionName().equals("step")) {
-                        Object delegate = ArgumentsAction.getResolvedArguments(node).get("delegate");
-                        if (delegate instanceof UninstantiatedDescribable) {
-                            UninstantiatedDescribable ud = (UninstantiatedDescribable) delegate;
-                            DescribableModel<?> model = ud.getModel();
-                            if (model != null && model.getType() == JUnitResultArchiver.class) {
-                                try {
-                                    JUnitResultArchiver archiver = ud.instantiate(JUnitResultArchiver.class);
-                                    // TODO etc.
-                                } catch (Exception x) {
-                                    LOGGER.log(Level.WARNING, null, x);
+                    FlowExecutionOwner owner = ((FlowExecutionOwner.Executable) last).asFlowExecutionOwner();
+                    if (owner == null) {
+                        return;
+                    }
+                    FlowExecution exec = owner.getOrNull();
+                    if (exec == null) {
+                        return;
+                    }
+                    boolean keepLongStdio = false;
+                    StringBuilder glob = null;
+                    for (FlowNode n : new DepthFirstScanner().allNodes(exec)) {
+                        if (n instanceof StepNode && ((StepNode) n).getDescriptor().getFunctionName().equals("step")) {
+                            Object delegate = ArgumentsAction.getResolvedArguments(n).get("delegate");
+                            if (delegate instanceof UninstantiatedDescribable) {
+                                UninstantiatedDescribable ud = (UninstantiatedDescribable) delegate;
+                                DescribableModel<?> model = ud.getModel();
+                                if (model != null && model.getType() == JUnitResultArchiver.class) {
+                                    try {
+                                        JUnitResultArchiver archiver = ud.instantiate(JUnitResultArchiver.class);
+                                        keepLongStdio |= archiver.isKeepLongStdio();
+                                        if (glob == null) {
+                                            glob = new StringBuilder();
+                                        } else {
+                                            glob.append(',').append(archiver.getTestResults());
+                                        }
+                                    } catch (Exception x) {
+                                        LOGGER.log(Level.WARNING, null, x);
+                                    }
                                 }
                             }
                         }
                     }
-                    attachedActions.put(node, new PipelineRealtimeTestResultAction(run, workspace, /* TODO */false, /* TODO */"nada"));
+                    if (glob != null) {
+                        attachedActions.put(node, new PipelineRealtimeTestResultAction(run, workspace, keepLongStdio, glob.toString()));
+                    }
                 }
             }
         } else if (node instanceof BlockEndNode) {
