@@ -49,6 +49,10 @@ import org.jenkinsci.plugins.workflow.graph.FlowNode;
 import org.jenkinsci.plugins.workflow.graph.StepNode;
 import org.jenkinsci.plugins.workflow.graphanalysis.DepthFirstScanner;
 
+/**
+ * Attaches distinct test result actions to each {@code node} (or {@code ws}) block in a job with this plugin activated.
+ * Looks for all {@code junit} steps in the {@code lastSuccessfulBuild} so it can guess at test patterns to archive.
+ */
 @Extension
 public class PipelineAttacher implements GraphListener {
 
