@@ -1,0 +1,111 @@
+/*
+ * The MIT License
+ *
+ * Copyright 2017 CloudBees, Inc.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
+ */
+package org.jenkinsci.plugins.junitrealtimetestreporter;
+
+import hudson.model.Run;
+import hudson.tasks.test.AbstractTestResultAction;
+import hudson.tasks.test.TestResult;
+import java.io.IOException;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+import org.kohsuke.stapler.HttpRedirect;
+import org.kohsuke.stapler.StaplerProxy;
+
+abstract class AbstractRealtimeTestResultAction extends AbstractTestResultAction<AbstractRealtimeTestResultAction> implements StaplerProxy {
+
+    private static final Logger LOGGER = Logger.getLogger(AbstractRealtimeTestResultAction.class.getName());
+
+    private transient TestResult result;
+    private transient long updated;
+
+    protected AbstractRealtimeTestResultAction(Run<?, ?> owner) {
+        owner.addAction(this);
+    }
+
+    @Override
+    public String getDisplayName() {
+        return "Realtime Test Result";
+    }
+
+    @Override
+    public String getUrlName() {
+        return "realtimeTestReport";
+    }
+
+    protected abstract TestResult parse();
+
+    @Override
+    public TestResult getResult() {
+        // Refresh every 1/100 of a job estimated duration but not more often than every 5 seconds
+        final long threshold = Math.max(5000, run.getEstimatedDuration() / 100);
+        if (updated > System.currentTimeMillis() - threshold) {
+            LOGGER.fine("Cache hit");
+            return result;
+        }
+        result = parse();
+        updated = System.currentTimeMillis();
+        return result;
+    }
+
+    @Override
+    public int getFailCount() {
+        if (getResult() == null) {
+            return 0;
+        }
+        return getResult().getFailCount();
+    }
+
+    @Override
+    public int getTotalCount() {
+        if (getResult() == null) {
+            return 0;
+        }
+        return getResult().getTotalCount();
+    }
+
+    @Override
+    public TestResult getTarget() {
+        if (!run.isBuilding()) {
+            LOGGER.log(Level.WARNING, "Dangling RealtimeTestResultAction on {0}. Probably not finalized correctly.", run);
+            detachFrom(run);
+            throw new HttpRedirect(run.getUrl());
+        }
+        if (getResult() != null) {
+            return getResult();
+        }
+        return new NullTestResult(this);
+    }
+
+    /*package*/ static void detachFrom(final Run<?, ?> build) {
+        if (build.removeActions(AbstractRealtimeTestResultAction.class)) {
+            LOGGER.log(Level.FINE, "Detaching RealtimeTestResultAction from {0}", build);
+            try {
+                build.save();
+            } catch (IOException x) {
+                LOGGER.log(Level.WARNING, null, x);
+            }
+        }
+    }
+
+}

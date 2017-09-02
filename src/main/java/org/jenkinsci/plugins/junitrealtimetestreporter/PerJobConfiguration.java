@@ -26,12 +26,12 @@ package org.jenkinsci.plugins.junitrealtimetestreporter;
 import hudson.Extension;
 import hudson.model.JobProperty;
 import hudson.model.JobPropertyDescriptor;
-import hudson.model.AbstractProject;
 import hudson.model.Job;
 import net.sf.json.JSONObject;
 
 import org.kohsuke.stapler.StaplerRequest;
 
+// TODO OptionalJobProperty
 public class PerJobConfiguration extends JobProperty<Job<?,?>> {
 
     private static final PerJobConfiguration DEFAULT = new PerJobConfiguration(false);
@@ -44,7 +44,7 @@ public class PerJobConfiguration extends JobProperty<Job<?,?>> {
         this.reportInRealtime = reportInRealtime;
     }
 
-    /*package*/ static PerJobConfiguration getConfig(final AbstractProject<?, ?> project) {
+    /*package*/ static PerJobConfiguration getConfig(final Job<?, ?> project) {
 
         final PerJobConfiguration property = project.getProperty(PerJobConfiguration.class);
         return property != null ? property : DEFAULT;

@@ -24,6 +24,7 @@
 package org.jenkinsci.plugins.junitrealtimetestreporter;
 
 import hudson.model.AbstractBuild;
+import hudson.model.Run;
 import hudson.tasks.test.TestObject;
 import hudson.tasks.test.TestResult;
 
@@ -34,9 +35,9 @@ import hudson.tasks.test.TestResult;
  */
 /*package*/ final class NullTestResult extends TestResult {
 
-    private final RealtimeTestResultAction action;
+    private final AbstractRealtimeTestResultAction action;
 
-    /*package*/ NullTestResult(final RealtimeTestResultAction action) {
+    /*package*/ NullTestResult(final AbstractRealtimeTestResultAction action) {
 
         this.action = action;
     }
@@ -53,9 +54,8 @@ import hudson.tasks.test.TestResult;
     }
 
     @Override
-    public AbstractBuild<?, ?> getOwner() {
-
-        return action.owner;
+    public Run<?, ?> getRun() {
+        return action.run;
     }
 
     @Override
