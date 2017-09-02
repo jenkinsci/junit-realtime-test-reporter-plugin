@@ -58,7 +58,7 @@ public class Attacher extends RunListener<Run<?, ?>> {
 
     private static boolean isApplicable(final AbstractBuild<?, ?> build) {
 
-        if (!RealtimeTestResultAction.getConfig(build).reportInRealtime) return false;
+        if (!PerJobConfiguration.isActive(build.getParent())) return false;
 
         if (build instanceof MavenModuleSetBuild) return true;
 

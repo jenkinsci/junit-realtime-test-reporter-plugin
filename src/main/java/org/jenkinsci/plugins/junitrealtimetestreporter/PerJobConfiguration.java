@@ -31,10 +31,9 @@ import net.sf.json.JSONObject;
 
 import org.kohsuke.stapler.StaplerRequest;
 
-// TODO OptionalJobProperty
+// TODO OptionalJobProperty to delete reportInRealtime field, and add a @Symbol for easy use from multibranch
 public class PerJobConfiguration extends JobProperty<Job<?,?>> {
 
-    private static final PerJobConfiguration DEFAULT = new PerJobConfiguration(false);
     private static final PerJobConfiguration REPORTING = new PerJobConfiguration(true);
 
     public final boolean reportInRealtime;
@@ -44,10 +43,9 @@ public class PerJobConfiguration extends JobProperty<Job<?,?>> {
         this.reportInRealtime = reportInRealtime;
     }
 
-    /*package*/ static PerJobConfiguration getConfig(final Job<?, ?> project) {
-
-        final PerJobConfiguration property = project.getProperty(PerJobConfiguration.class);
-        return property != null ? property : DEFAULT;
+    public static boolean isActive(Job<?, ?> project) {
+        PerJobConfiguration cfg = project.getProperty(PerJobConfiguration.class);
+        return cfg != null && cfg.reportInRealtime;
     }
 
     @Extension

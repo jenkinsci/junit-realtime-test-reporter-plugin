@@ -93,11 +93,6 @@ public class RealtimeTestResultAction extends AbstractRealtimeTestResultAction {
         return build.getRootBuild().getParent();
     }
 
-    /*package*/ static PerJobConfiguration getConfig(AbstractBuild<?, ?> build) {
-
-        return PerJobConfiguration.getConfig(getProject(build));
-    }
-
     /*package*/ static void detachFrom(final AbstractBuild<?, ?> build) {
 
         final List<Action> actions = build.getActions();

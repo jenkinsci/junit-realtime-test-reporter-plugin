@@ -73,7 +73,7 @@ public class PipelineAttacher implements GraphListener {
                 if (executable instanceof Run) {
                     Run<?, ?> run = (Run<?, ?>) executable;
                     Job<?, ?> job = run.getParent();
-                    if (!PerJobConfiguration.getConfig(job).reportInRealtime) {
+                    if (!PerJobConfiguration.isActive(job)) {
                         return;
                     }
                     Run<?, ?> last = job.getLastSuccessfulBuild();
