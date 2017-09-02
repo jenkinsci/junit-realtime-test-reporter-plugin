@@ -66,7 +66,7 @@ abstract class AbstractRealtimeTestResultAction extends AbstractTestResultAction
             final long started = System.currentTimeMillis(); // TODO use nanoTime
             result = parse();
             result.setParentAction(this);
-            LOGGER.log(Level.INFO, "Parsing took {0} ms", System.currentTimeMillis() - started);
+            LOGGER.log(Level.FINE, "Parsing took {0} ms", System.currentTimeMillis() - started);
             updated = System.currentTimeMillis();
         } catch (AbortException ex) {
             // Thrown when there are no reports or no workspace witch is normal
