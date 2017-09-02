@@ -23,13 +23,13 @@
  */
 package org.jenkinsci.plugins.junitrealtimetestreporter;
 
-import hudson.AbortException;
 import hudson.Util;
 import hudson.matrix.MatrixBuild;
 import hudson.maven.MavenBuild;
 import hudson.maven.MavenModuleSetBuild;
 import hudson.model.AbstractBuild;
 import hudson.model.AbstractProject;
+import hudson.model.Action;
 import hudson.tasks.junit.JUnitParser;
 import hudson.tasks.junit.TestResultAction;
 import hudson.tasks.junit.JUnitResultArchiver;
@@ -37,7 +37,8 @@ import hudson.tasks.test.TestResult;
 
 import java.io.IOException;
 import java.util.Arrays;
-import java.util.logging.Level;
+import java.util.Iterator;
+import java.util.List;
 import java.util.logging.Logger;
 
 /**
@@ -61,33 +62,9 @@ public class RealtimeTestResultAction extends AbstractRealtimeTestResultAction {
     }
 
     @Override
-    protected TestResult parse() {
-
+    protected TestResult parse() throws IOException, InterruptedException {
         final JUnitResultArchiver archiver = getArchiver(this.owner);
-
-        try {
-
-            final long started = System.currentTimeMillis();
-            final TestResult result = new JUnitParser(archiver.isKeepLongStdio())
-                    .parse(getGlob(archiver), this.owner, null, null)
-            ;
-            LOGGER.log(Level.INFO, "Parsing took {0} ms", System.currentTimeMillis() - started);
-
-            result.setParentAction(this);
-            return result;
-        } catch (AbortException ex) {
-            // Thrown when there are no reports or no workspace witch is normal
-            // at the beginning the build. This is also a signal that there are
-            // no reports to update (already parsed was excluded and no new have
-            // arrived so far).
-            LOGGER.fine("No new reports found.");
-        } catch (InterruptedException ex) {
-            LOGGER.log(Level.WARNING, "Unable to parse", ex);
-        } catch (IOException ex) {
-            LOGGER.log(Level.WARNING, "Unable to parse", ex);
-        }
-
-        return null;
+        return new JUnitParser(archiver.isKeepLongStdio()).parse(getGlob(archiver), this.owner, null, null);
     }
 
     private String getGlob(final JUnitResultArchiver archiver) {
@@ -124,4 +101,28 @@ public class RealtimeTestResultAction extends AbstractRealtimeTestResultAction {
         return PerJobConfiguration.getConfig(getProject(build));
     }
 
+    /*package*/ static void detachFrom(final AbstractBuild<?, ?> build) {
+
+        final List<Action> actions = build.getActions();
+
+        final Iterator<Action> iterator = actions.iterator();
+        boolean removed = false;
+        while (iterator.hasNext()) {
+
+            final Action action = iterator.next();
+            if (action instanceof RealtimeTestResultAction) {
+
+                LOGGER.info("Detaching RealtimeTestResultAction from " + build);
+                actions.remove(action);
+                ((RealtimeTestResultAction) action).result = null;
+                removed = true;
+            }
+        }
+
+        if (removed) try {
+            build.save();
+        } catch (IOException ex) {
+            throw new AssertionError(ex);
+        }
+    }
 }

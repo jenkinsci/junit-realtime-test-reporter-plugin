@@ -23,6 +23,7 @@
  */
 package org.jenkinsci.plugins.junitrealtimetestreporter;
 
+import hudson.AbortException;
 import hudson.model.Run;
 import hudson.tasks.test.AbstractTestResultAction;
 import hudson.tasks.test.TestResult;
@@ -36,7 +37,7 @@ abstract class AbstractRealtimeTestResultAction extends AbstractTestResultAction
 
     private static final Logger LOGGER = Logger.getLogger(AbstractRealtimeTestResultAction.class.getName());
 
-    private transient TestResult result;
+    protected TestResult result;
     private transient long updated;
 
     protected AbstractRealtimeTestResultAction(Run<?, ?> owner) {
@@ -53,7 +54,7 @@ abstract class AbstractRealtimeTestResultAction extends AbstractTestResultAction
         return "realtimeTestReport";
     }
 
-    protected abstract TestResult parse();
+    protected abstract TestResult parse() throws IOException, InterruptedException;
 
     @Override
     public TestResult getResult() {
@@ -63,8 +64,23 @@ abstract class AbstractRealtimeTestResultAction extends AbstractTestResultAction
             LOGGER.fine("Cache hit");
             return result;
         }
-        result = parse();
-        updated = System.currentTimeMillis();
+        try {
+            final long started = System.currentTimeMillis(); // TODO use nanoTime
+            result = parse();
+            result.setParentAction(this);
+            LOGGER.log(Level.INFO, "Parsing took {0} ms", System.currentTimeMillis() - started);
+            updated = System.currentTimeMillis();
+        } catch (AbortException ex) {
+            // Thrown when there are no reports or no workspace witch is normal
+            // at the beginning the build. This is also a signal that there are
+            // no reports to update (already parsed was excluded and no new have
+            // arrived so far).
+            LOGGER.fine("No new reports found.");
+        } catch (InterruptedException ex) {
+            LOGGER.log(Level.WARNING, "Unable to parse", ex);
+        } catch (IOException ex) {
+            LOGGER.log(Level.WARNING, "Unable to parse", ex);
+        }
         return result;
     }
 
@@ -88,7 +104,7 @@ abstract class AbstractRealtimeTestResultAction extends AbstractTestResultAction
     public TestResult getTarget() {
         if (!run.isBuilding()) {
             LOGGER.log(Level.WARNING, "Dangling RealtimeTestResultAction on {0}. Probably not finalized correctly.", run);
-            detachFrom(run);
+            detachAllFrom(run);
             throw new HttpRedirect(run.getUrl());
         }
         if (getResult() != null) {
@@ -97,7 +113,7 @@ abstract class AbstractRealtimeTestResultAction extends AbstractTestResultAction
         return new NullTestResult(this);
     }
 
-    /*package*/ static void detachFrom(final Run<?, ?> build) {
+    /*package*/ static void detachAllFrom(final Run<?, ?> build) {
         if (build.removeActions(AbstractRealtimeTestResultAction.class)) {
             LOGGER.log(Level.FINE, "Detaching RealtimeTestResultAction from {0}", build);
             try {

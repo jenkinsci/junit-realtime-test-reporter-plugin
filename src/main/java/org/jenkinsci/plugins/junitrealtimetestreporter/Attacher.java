@@ -52,12 +52,7 @@ public class Attacher extends RunListener<Run<?, ?>> {
 
     @Override
     public void onFinalized(Run<?, ?> run) {
-        if ( !( run instanceof AbstractBuild )) {
-            return;
-        }
-        final AbstractBuild<?, ?> build = (AbstractBuild<?, ?>) run;
-
-        RealtimeTestResultAction.detachFrom(build);
+        AbstractRealtimeTestResultAction.detachAllFrom(run);
     }
 
     private static boolean isApplicable(final AbstractBuild<?, ?> build) {
