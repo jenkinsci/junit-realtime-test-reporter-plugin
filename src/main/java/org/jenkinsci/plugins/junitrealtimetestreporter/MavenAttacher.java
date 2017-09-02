@@ -67,7 +67,8 @@ public class MavenAttacher extends MavenReporter {
 
             if (RealtimeTestResultAction.getConfig(build).reportInRealtime) {
 
-                build.addAction(new RealtimeTestResultAction(build));
+                build.addAction(new RealtimeTestResultAction());
+                AbstractRealtimeTestResultAction.saveBuild(build);
             }
             return null;
         }

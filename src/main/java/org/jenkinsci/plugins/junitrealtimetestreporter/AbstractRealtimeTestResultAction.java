@@ -40,9 +40,7 @@ abstract class AbstractRealtimeTestResultAction extends AbstractTestResultAction
     protected TestResult result;
     private transient long updated;
 
-    protected AbstractRealtimeTestResultAction(Run<?, ?> owner) {
-        owner.addAction(this);
-    }
+    protected AbstractRealtimeTestResultAction() {}
 
     @Override
     public String getDisplayName() {
@@ -113,14 +111,18 @@ abstract class AbstractRealtimeTestResultAction extends AbstractTestResultAction
         return new NullTestResult(this);
     }
 
+    static void saveBuild(Run<?, ?> build) {
+        try {
+            build.save();
+        } catch (IOException x) {
+            LOGGER.log(Level.WARNING, null, x);
+        }
+    }
+
     /*package*/ static void detachAllFrom(final Run<?, ?> build) {
         if (build.removeActions(AbstractRealtimeTestResultAction.class)) {
             LOGGER.log(Level.FINE, "Detaching RealtimeTestResultAction from {0}", build);
-            try {
-                build.save();
-            } catch (IOException x) {
-                LOGGER.log(Level.WARNING, null, x);
-            }
+            saveBuild(build);
         }
     }
 

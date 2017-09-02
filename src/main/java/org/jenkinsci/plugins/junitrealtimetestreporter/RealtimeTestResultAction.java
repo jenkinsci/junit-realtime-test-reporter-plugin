@@ -56,15 +56,12 @@ public class RealtimeTestResultAction extends AbstractRealtimeTestResultAction {
 
     private static final Logger LOGGER = Logger.getLogger(RealtimeTestResultAction.class.getName());
 
-    public RealtimeTestResultAction(final AbstractBuild<?, ?> owner) {
-
-        super(owner);
-    }
+    public RealtimeTestResultAction() {}
 
     @Override
     protected TestResult parse() throws IOException, InterruptedException {
         final JUnitResultArchiver archiver = getArchiver(this.owner);
-        return new JUnitParser(archiver.isKeepLongStdio()).parse(getGlob(archiver), this.owner, null, null);
+        return new JUnitParser(archiver.isKeepLongStdio(), /* TODO really?! */false).parse(getGlob(archiver), this.owner, null, null);
     }
 
     private String getGlob(final JUnitResultArchiver archiver) {

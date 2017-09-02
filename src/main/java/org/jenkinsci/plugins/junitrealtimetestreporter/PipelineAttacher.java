@@ -33,9 +33,6 @@ import hudson.tasks.junit.JUnitParser;
 import hudson.tasks.junit.JUnitResultArchiver;
 import hudson.tasks.test.TestResult;
 import java.io.IOException;
-import java.util.Collections;
-import java.util.Map;
-import java.util.WeakHashMap;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import org.jenkinsci.plugins.structs.describable.DescribableModel;
@@ -56,8 +53,6 @@ import org.jenkinsci.plugins.workflow.graphanalysis.DepthFirstScanner;
 public class PipelineAttacher implements GraphListener {
 
     private static final Logger LOGGER = Logger.getLogger(PipelineAttacher.class.getName());
-
-    private final Map<FlowNode, PipelineRealtimeTestResultAction> attachedActions = Collections.synchronizedMap(new WeakHashMap<FlowNode, PipelineRealtimeTestResultAction>());
 
     @Override
     public void onNewHead(FlowNode node) {
@@ -118,27 +113,47 @@ public class PipelineAttacher implements GraphListener {
                         }
                     }
                     if (glob != null) {
-                        attachedActions.put(node, new PipelineRealtimeTestResultAction(run, workspace, keepLongStdio, glob.toString()));
+                        run.addAction(new PipelineRealtimeTestResultAction(node.getId(), workspace, keepLongStdio, glob.toString()));
+                        AbstractRealtimeTestResultAction.saveBuild(run);
                     }
                 }
             }
         } else if (node instanceof BlockEndNode) {
-            PipelineRealtimeTestResultAction action = attachedActions.remove(((BlockEndNode) node).getStartNode());
-            if (action != null) {
-                action.run.removeAction(action);
+            BlockStartNode startNode = ((BlockEndNode) node).getStartNode();
+            if (startNode.getPersistentAction(WorkspaceAction.class) == null) {
+                return; // shortcut
+            }
+            String startNodeId = startNode.getId();
+            Queue.Executable executable;
+            try {
+                executable = node.getExecution().getOwner().getExecutable();
+            } catch (IOException x) {
+                LOGGER.log(Level.WARNING, null, x);
+                return;
+            }
+            if (executable instanceof Run) {
+                Run<?, ?> run = (Run<?, ?>) executable;
+                for (PipelineRealtimeTestResultAction a : run.getActions(PipelineRealtimeTestResultAction.class)) {
+                    if (a.startNodeId.equals(startNodeId)) {
+                        run.removeAction(a);
+                        AbstractRealtimeTestResultAction.saveBuild(run);
+                        break;
+                    }
+                }
             }
         }
     }
 
     private static class PipelineRealtimeTestResultAction extends AbstractRealtimeTestResultAction {
 
+        private final String startNodeId;
         private final String node;
         private final String workspace;
         private final boolean keepLongStdio;
         private final String glob;
 
-        PipelineRealtimeTestResultAction(Run<?, ?> owner, FilePath ws, boolean keepLongStdio, String glob) {
-            super(owner);
+        PipelineRealtimeTestResultAction(String startNodeId, FilePath ws, boolean keepLongStdio, String glob) {
+            this.startNodeId = startNodeId;
             node = FilePathUtils.getNodeName(ws);
             workspace = ws.getRemote();
             this.keepLongStdio = keepLongStdio;
@@ -147,7 +162,7 @@ public class PipelineAttacher implements GraphListener {
 
         @Override
         protected TestResult parse() throws IOException, InterruptedException {
-            return new JUnitParser(keepLongStdio).parseResult(glob, run, FilePathUtils.find(node, workspace), null, null);
+            return new JUnitParser(keepLongStdio, true).parseResult(glob, run, FilePathUtils.find(node, workspace), null, null);
         }
 
     }

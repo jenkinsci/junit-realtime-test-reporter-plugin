@@ -47,7 +47,8 @@ public class Attacher extends RunListener<Run<?, ?>> {
 
         if (!isApplicable(build)) return;
 
-        build.addAction(new RealtimeTestResultAction(build));
+        build.addAction(new RealtimeTestResultAction());
+        AbstractRealtimeTestResultAction.saveBuild(run);
     }
 
     @Override
