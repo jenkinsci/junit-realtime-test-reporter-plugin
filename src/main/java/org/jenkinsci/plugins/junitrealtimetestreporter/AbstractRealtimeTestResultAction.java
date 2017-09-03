@@ -55,6 +55,7 @@ abstract class AbstractRealtimeTestResultAction extends AbstractTestResultAction
         }
         try {
             final long started = System.currentTimeMillis(); // TODO use nanoTime
+            // TODO this can block on Remoting and hang the UI; need to refresh results asynchronously
             result = parse();
             result.setParentAction(this);
             LOGGER.log(Level.FINE, "Parsing took {0} ms", System.currentTimeMillis() - started);
