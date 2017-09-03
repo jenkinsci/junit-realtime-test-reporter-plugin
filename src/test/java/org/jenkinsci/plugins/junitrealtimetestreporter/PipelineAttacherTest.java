@@ -84,6 +84,7 @@ public class PipelineAttacherTest {
                 assertNotNull(rta);
                 assertEquals(0, rta.getTotalCount());
                 assertEquals(0, rta.getFailCount());
+                rr.j.assertBuildStatus(null, b2);
             }
         });
         rr.addStep(new Statement() {
@@ -94,18 +95,21 @@ public class PipelineAttacherTest {
                 assertNotNull(rta);
                 assertEquals(0, rta.getTotalCount());
                 assertEquals(0, rta.getFailCount());
+                rr.j.assertBuildStatus(null, b2);
                 SemaphoreStep.success("pre/2", null);
                 SemaphoreStep.waitForStart("mid/2", b2);
                 rta = b2.getAction(AbstractRealtimeTestResultAction.class);
                 assertNotNull(rta);
                 assertEquals(2, rta.getTotalCount());
                 assertEquals(0, rta.getFailCount());
+                rr.j.assertBuildStatus(null, b2);
                 SemaphoreStep.success("mid/2", null);
                 SemaphoreStep.waitForStart("post/2", b2);
                 rta = b2.getAction(AbstractRealtimeTestResultAction.class);
                 assertNotNull(rta);
                 assertEquals(4, rta.getTotalCount());
                 assertEquals(1, rta.getFailCount());
+                rr.j.assertBuildStatus(null, b2); // only final JUnitResultArchiver sets it to UNSTABLE
                 SemaphoreStep.success("post/2", null);
                 SemaphoreStep.waitForStart("final/2", b2);
                 assertEquals(Collections.emptyList(), b2.getActions(AbstractRealtimeTestResultAction.class));
@@ -119,5 +123,7 @@ public class PipelineAttacherTest {
             }
         });
     }
+
+    // TODO test distinct globs, parallel, repeated archiving
 
 }
