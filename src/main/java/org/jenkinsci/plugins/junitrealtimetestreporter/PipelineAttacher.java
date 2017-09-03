@@ -33,8 +33,11 @@ import hudson.tasks.junit.JUnitParser;
 import hudson.tasks.junit.JUnitResultArchiver;
 import hudson.tasks.test.TestResult;
 import java.io.IOException;
+import java.util.Set;
+import java.util.TreeSet;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import org.apache.commons.lang.StringUtils;
 import org.jenkinsci.plugins.structs.describable.DescribableModel;
 import org.jenkinsci.plugins.structs.describable.UninstantiatedDescribable;
 import org.jenkinsci.plugins.workflow.FilePathUtils;
@@ -104,7 +107,7 @@ public class PipelineAttacher implements GraphListener {
                             return;
                         }
                         boolean keepLongStdio = false;
-                        StringBuilder glob = null;
+                        Set<String> globs = new TreeSet<String>();
                         for (FlowNode n : new DepthFirstScanner().allNodes(exec)) {
                             if (n instanceof StepNode && ((StepNode) n).getDescriptor().getFunctionName().equals("step")) {
                                 Object delegate = ArgumentsAction.getResolvedArguments(n).get("delegate");
@@ -115,11 +118,7 @@ public class PipelineAttacher implements GraphListener {
                                         try {
                                             JUnitResultArchiver archiver = ud.instantiate(JUnitResultArchiver.class);
                                             keepLongStdio |= archiver.isKeepLongStdio();
-                                            if (glob == null) {
-                                                glob = new StringBuilder();
-                                            } else {
-                                                glob.append(',').append(archiver.getTestResults());
-                                            }
+                                            globs.add(archiver.getTestResults());
                                         } catch (Exception x) {
                                             LOGGER.log(Level.WARNING, null, x);
                                         }
@@ -127,9 +126,9 @@ public class PipelineAttacher implements GraphListener {
                                 }
                             }
                         }
-                        if (glob != null) {
-                            LOGGER.log(Level.FINE, "seem to be recording ‘{0}’ in {1}", new Object[] {glob, job});
-                            run.addAction(new PipelineRealtimeTestResultAction(node2.getId(), workspace, keepLongStdio, glob.toString()));
+                        if (!globs.isEmpty()) {
+                            LOGGER.log(Level.FINE, "seem to be recording {0} in {1}", new Object[] {globs, job});
+                            run.addAction(new PipelineRealtimeTestResultAction(node2.getId(), workspace, keepLongStdio, globs));
                             AbstractRealtimeTestResultAction.saveBuild(run);
                         } else {
                             LOGGER.log(Level.FINE, "no junit recorded in {0}", run);
@@ -175,22 +174,22 @@ public class PipelineAttacher implements GraphListener {
         private final String node;
         private final String workspace;
         private final boolean keepLongStdio;
-        private final String glob;
+        private final Set<String> globs;
 
-        PipelineRealtimeTestResultAction(String startNodeId, FilePath ws, boolean keepLongStdio, String glob) {
+        PipelineRealtimeTestResultAction(String startNodeId, FilePath ws, boolean keepLongStdio, Set<String> globs) {
             this.startNodeId = startNodeId;
             node = FilePathUtils.getNodeName(ws);
             workspace = ws.getRemote();
             this.keepLongStdio = keepLongStdio;
-            this.glob = glob;
+            this.globs = globs;
         }
 
         @Override
         protected TestResult parse() throws IOException, InterruptedException {
             FilePath ws = FilePathUtils.find(node, workspace);
             if (ws != null && ws.isDirectory()) {
-                LOGGER.log(Level.FINE, "parsing ‘{0}’ in {1} on node {2} for {3}", new Object[] {glob, workspace, node, run});
-                return new JUnitParser(keepLongStdio, true).parseResult(glob, run, ws, null, null);
+                LOGGER.log(Level.FINE, "parsing {0} in {1} on node {2} for {3}", new Object[] {globs, workspace, node, run});
+                return new JUnitParser(keepLongStdio, true).parseResult(StringUtils.join(globs, ','), run, ws, null, null);
             } else {
                 LOGGER.log(Level.FINE, "skipping parse in nonexistent workspace for {0}", run);
                 return new hudson.tasks.junit.TestResult();
