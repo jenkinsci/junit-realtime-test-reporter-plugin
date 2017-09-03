@@ -58,6 +58,7 @@ public class PipelineAttacherTest {
             public void evaluate() throws Throwable {
                 WorkflowJob p = rr.j.jenkins.createProject(WorkflowJob.class, "p");
                 p.setDefinition(new CpsFlowDefinition(
+                    "properties([realTimeJUnitReports()])\n" +
                     "node {\n" +
                     "  semaphore 'pre'\n" +
                     "  writeFile text: '''<testsuite name='a'><testcase name='a1'/><testcase name='a2'/></testsuite>''', file: 'a.xml'\n" +
@@ -67,7 +68,6 @@ public class PipelineAttacherTest {
                     "  junit '*.xml'\n" +
                     "  deleteDir()\n" +
                     "}; semaphore 'final'", true));
-                p.addProperty(PerJobConfiguration.REPORTING);
                 SemaphoreStep.success("pre/1", null);
                 SemaphoreStep.success("mid/1", null);
                 SemaphoreStep.success("post/1", null);

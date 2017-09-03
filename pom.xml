@@ -118,6 +118,12 @@
       <version>2.6</version>
       <scope>test</scope>
     </dependency>
+    <dependency>
+      <groupId>org.jenkins-ci.plugins.workflow</groupId>
+      <artifactId>workflow-multibranch</artifactId>
+      <version>2.16</version>
+      <scope>test</scope>
+    </dependency>
     <!-- upper bound deps -->
     <dependency>
       <groupId>org.jenkins-ci.plugins</groupId>
