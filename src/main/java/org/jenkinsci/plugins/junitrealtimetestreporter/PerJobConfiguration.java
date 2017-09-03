@@ -34,7 +34,7 @@ import org.kohsuke.stapler.StaplerRequest;
 // TODO OptionalJobProperty to delete reportInRealtime field, and add a @Symbol for easy use from multibranch
 public class PerJobConfiguration extends JobProperty<Job<?,?>> {
 
-    private static final PerJobConfiguration REPORTING = new PerJobConfiguration(true);
+    static final PerJobConfiguration REPORTING = new PerJobConfiguration(true);
 
     public final boolean reportInRealtime;
 

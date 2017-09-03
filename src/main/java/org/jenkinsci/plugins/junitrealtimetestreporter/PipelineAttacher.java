@@ -60,71 +60,89 @@ public class PipelineAttacher implements GraphListener {
 
     @Override
     public void onNewHead(FlowNode node) {
+        if (LOGGER.isLoggable(Level.FINER)) {
+            LOGGER.log(Level.FINER, "notified of {0} ~ {1}", new Object[] {node, node.getDisplayFunctionName()});
+        }
         if (node instanceof BlockStartNode) {
-            WorkspaceAction wsa = node.getPersistentAction(WorkspaceAction.class);
-            if (wsa != null) {
-                FilePath workspace = wsa.getWorkspace();
-                if (workspace == null) {
-                    return;
-                }
-                Queue.Executable executable;
-                try {
-                    executable = node.getExecution().getOwner().getExecutable();
-                } catch (IOException x) {
-                    LOGGER.log(Level.WARNING, null, x);
-                    return;
-                }
-                if (executable instanceof Run) {
-                    Run<?, ?> run = (Run<?, ?>) executable;
-                    Job<?, ?> job = run.getParent();
-                    if (!PerJobConfiguration.isActive(job)) {
+            for (FlowNode node2 : node.getParents()) { // do not pay attention until the body is invoked, when WorkspaceAction is attached
+                LOGGER.log(Level.FINER, "considering of {0} ~ {1}", new Object[] {node2, node2.getDisplayFunctionName()});
+                WorkspaceAction wsa = node2.getPersistentAction(WorkspaceAction.class);
+                if (wsa != null) {
+                    FilePath workspace = wsa.getWorkspace();
+                    if (workspace == null) {
+                        LOGGER.fine("no workspace");
                         return;
                     }
-                    Run<?, ?> last = job.getLastSuccessfulBuild();
-                    if (last == null || !(last instanceof FlowExecutionOwner.Executable)) {
+                    Queue.Executable executable;
+                    try {
+                        executable = node2.getExecution().getOwner().getExecutable();
+                    } catch (IOException x) {
+                        LOGGER.log(Level.WARNING, null, x);
                         return;
                     }
-                    FlowExecutionOwner owner = ((FlowExecutionOwner.Executable) last).asFlowExecutionOwner();
-                    if (owner == null) {
-                        return;
-                    }
-                    FlowExecution exec = owner.getOrNull();
-                    if (exec == null) {
-                        return;
-                    }
-                    boolean keepLongStdio = false;
-                    StringBuilder glob = null;
-                    for (FlowNode n : new DepthFirstScanner().allNodes(exec)) {
-                        if (n instanceof StepNode && ((StepNode) n).getDescriptor().getFunctionName().equals("step")) {
-                            Object delegate = ArgumentsAction.getResolvedArguments(n).get("delegate");
-                            if (delegate instanceof UninstantiatedDescribable) {
-                                UninstantiatedDescribable ud = (UninstantiatedDescribable) delegate;
-                                DescribableModel<?> model = ud.getModel();
-                                if (model != null && model.getType() == JUnitResultArchiver.class) {
-                                    try {
-                                        JUnitResultArchiver archiver = ud.instantiate(JUnitResultArchiver.class);
-                                        keepLongStdio |= archiver.isKeepLongStdio();
-                                        if (glob == null) {
-                                            glob = new StringBuilder();
-                                        } else {
-                                            glob.append(',').append(archiver.getTestResults());
+                    if (executable instanceof Run) {
+                        Run<?, ?> run = (Run<?, ?>) executable;
+                        Job<?, ?> job = run.getParent();
+                        if (!PerJobConfiguration.isActive(job)) {
+                            LOGGER.log(Level.FINE, "inactive in {0}", job);
+                            return;
+                        }
+                        LOGGER.log(Level.FINE, "encountered {0} in {1} entering {2}", new Object[] {workspace, run, node2.getDisplayFunctionName()});
+                        Run<?, ?> last = job.getLastSuccessfulBuild();
+                        if (!(last instanceof FlowExecutionOwner.Executable)) {
+                            LOGGER.log(Level.FINE, "no lastSuccessfulBuild in {0}", job);
+                            return;
+                        }
+                        FlowExecutionOwner owner = ((FlowExecutionOwner.Executable) last).asFlowExecutionOwner();
+                        if (owner == null) {
+                            LOGGER.log(Level.WARNING, "could not get FlowExecutionOwner from {0}", last);
+                            return;
+                        }
+                        FlowExecution exec = owner.getOrNull();
+                        if (exec == null) {
+                            LOGGER.log(Level.WARNING, "could not get FlowExecution from {0}", owner);
+                            return;
+                        }
+                        boolean keepLongStdio = false;
+                        StringBuilder glob = null;
+                        for (FlowNode n : new DepthFirstScanner().allNodes(exec)) {
+                            if (n instanceof StepNode && ((StepNode) n).getDescriptor().getFunctionName().equals("step")) {
+                                Object delegate = ArgumentsAction.getResolvedArguments(n).get("delegate");
+                                if (delegate instanceof UninstantiatedDescribable) {
+                                    UninstantiatedDescribable ud = (UninstantiatedDescribable) delegate;
+                                    DescribableModel<?> model = ud.getModel();
+                                    if (model != null && model.getType() == JUnitResultArchiver.class) {
+                                        try {
+                                            JUnitResultArchiver archiver = ud.instantiate(JUnitResultArchiver.class);
+                                            keepLongStdio |= archiver.isKeepLongStdio();
+                                            if (glob == null) {
+                                                glob = new StringBuilder();
+                                            } else {
+                                                glob.append(',').append(archiver.getTestResults());
+                                            }
+                                        } catch (Exception x) {
+                                            LOGGER.log(Level.WARNING, null, x);
                                         }
-                                    } catch (Exception x) {
-                                        LOGGER.log(Level.WARNING, null, x);
                                     }
                                 }
                             }
                         }
+                        if (glob != null) {
+                            LOGGER.log(Level.FINE, "seem to be recording ‘{0}’ in {1}", new Object[] {glob, job});
+                            run.addAction(new PipelineRealtimeTestResultAction(node2.getId(), workspace, keepLongStdio, glob.toString()));
+                            AbstractRealtimeTestResultAction.saveBuild(run);
+                        } else {
+                            LOGGER.log(Level.FINE, "no junit recorded in {0}", run);
+                        }
                     }
-                    if (glob != null) {
-                        run.addAction(new PipelineRealtimeTestResultAction(node.getId(), workspace, keepLongStdio, glob.toString()));
-                        AbstractRealtimeTestResultAction.saveBuild(run);
-                    }
+                } else {
+                    LOGGER.finer("no WorkspaceAction");
                 }
             }
         } else if (node instanceof BlockEndNode) {
             BlockStartNode startNode = ((BlockEndNode) node).getStartNode();
             if (startNode.getPersistentAction(WorkspaceAction.class) == null) {
+                LOGGER.finer("no WorkspaceAction");
                 return; // shortcut
             }
             String startNodeId = startNode.getId();
@@ -140,10 +158,13 @@ public class PipelineAttacher implements GraphListener {
                 for (PipelineRealtimeTestResultAction a : run.getActions(PipelineRealtimeTestResultAction.class)) {
                     if (a.startNodeId.equals(startNodeId)) {
                         run.removeAction(a);
+                        LOGGER.log(Level.FINE, "clearing {0}", node);
                         AbstractRealtimeTestResultAction.saveBuild(run);
                         break;
                     }
                 }
+            } else {
+                LOGGER.log(Level.WARNING, "not a Run: {0}", executable);
             }
         }
     }
@@ -166,7 +187,14 @@ public class PipelineAttacher implements GraphListener {
 
         @Override
         protected TestResult parse() throws IOException, InterruptedException {
-            return new JUnitParser(keepLongStdio, true).parseResult(glob, run, FilePathUtils.find(node, workspace), null, null);
+            FilePath ws = FilePathUtils.find(node, workspace);
+            if (ws != null && ws.isDirectory()) {
+                LOGGER.log(Level.FINE, "parsing ‘{0}’ in {1} on node {2} for {3}", new Object[] {glob, workspace, node, run});
+                return new JUnitParser(keepLongStdio, true).parseResult(glob, run, ws, null, null);
+            } else {
+                LOGGER.log(Level.FINE, "skipping parse in nonexistent workspace for {0}", run);
+                return new hudson.tasks.junit.TestResult();
+            }
         }
 
     }
