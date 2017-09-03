@@ -24,7 +24,6 @@
 package org.jenkinsci.plugins.junitrealtimetestreporter;
 
 import hudson.Extension;
-import hudson.maven.MavenModuleSetBuild;
 import hudson.model.TaskListener;
 import hudson.model.AbstractBuild;
 import hudson.model.Run;
@@ -60,7 +59,9 @@ public class Attacher extends RunListener<Run<?, ?>> {
 
         if (!PerJobConfiguration.isActive(build.getParent())) return false;
 
-        if (build instanceof MavenModuleSetBuild) return true;
+        if (build.getClass().getName().equals("hudson.maven.MavenModuleSetBuild")) {
+            return true;
+        }
 
         if (RealtimeTestResultAction.getArchiver(build) == null) return false;
 

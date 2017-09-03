@@ -25,8 +25,6 @@ package org.jenkinsci.plugins.junitrealtimetestreporter;
 
 import hudson.Util;
 import hudson.matrix.MatrixBuild;
-import hudson.maven.MavenBuild;
-import hudson.maven.MavenModuleSetBuild;
 import hudson.model.AbstractBuild;
 import hudson.model.AbstractProject;
 import hudson.model.Action;
@@ -84,7 +82,9 @@ public class RealtimeTestResultAction extends AbstractRealtimeTestResultAction {
 
     /*package*/ static JUnitResultArchiver getArchiver(AbstractBuild<?, ?> build) {
 
-        if (build instanceof MavenModuleSetBuild || build instanceof MavenBuild) return new DummyArchiver();
+        if (build.getClass().getName().equals("hudson.maven.MavenModuleSetBuild") || build.getClass().getName().equals("hudson.maven.MavenBuild")) {
+            return new DummyArchiver();
+        }
 
         return getProject(build).getPublishersList().get(JUnitResultArchiver.class);
     }

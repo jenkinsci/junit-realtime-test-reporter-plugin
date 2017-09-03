@@ -86,7 +86,7 @@ public class MavenAttacher extends MavenReporter {
         }
     }
 
-    @Extension
+    @Extension(optional = true)
     public static class Descriptor extends MavenReporterDescriptor {
 
         @Override
