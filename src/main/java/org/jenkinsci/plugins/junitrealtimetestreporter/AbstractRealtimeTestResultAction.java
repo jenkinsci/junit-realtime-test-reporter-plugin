@@ -43,16 +43,6 @@ abstract class AbstractRealtimeTestResultAction extends AbstractTestResultAction
 
     protected AbstractRealtimeTestResultAction() {}
 
-    @Override
-    public String getDisplayName() {
-        return "Realtime Test Result";
-    }
-
-    @Override
-    public String getUrlName() {
-        return "realtimeTestReport";
-    }
-
     protected abstract TestResult parse() throws IOException, InterruptedException;
 
     @Override

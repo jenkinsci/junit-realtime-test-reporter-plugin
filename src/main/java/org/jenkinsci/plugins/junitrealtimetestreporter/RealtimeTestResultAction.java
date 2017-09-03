@@ -57,6 +57,16 @@ public class RealtimeTestResultAction extends AbstractRealtimeTestResultAction {
     public RealtimeTestResultAction() {}
 
     @Override
+    public String getDisplayName() {
+        return "Realtime Test Result";
+    }
+
+    @Override
+    public String getUrlName() {
+        return "realtimeTestReport";
+    }
+
+    @Override
     protected TestResult parse() throws IOException, InterruptedException {
         final JUnitResultArchiver archiver = getArchiver(this.owner);
         return new JUnitParser(archiver.isKeepLongStdio(), /* TODO really?! */false).parse(getGlob(archiver), this.owner, null, null);

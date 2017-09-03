@@ -185,6 +185,16 @@ public class PipelineAttacher implements GraphListener {
         }
 
         @Override
+        public String getDisplayName() {
+            return "Realtime Test Result on " + (node.isEmpty() ? "master" : node);
+        }
+
+        @Override
+        public String getUrlName() {
+            return "realtimeTestReport-" + startNodeId;
+        }
+
+        @Override
         protected TestResult parse() throws IOException, InterruptedException {
             FilePath ws = FilePathUtils.find(node, workspace);
             if (ws != null && ws.isDirectory()) {
