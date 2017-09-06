@@ -44,7 +44,7 @@ public class PerJobConfiguration extends OptionalJobProperty<Job<?,?>> {
 
         @Override
         public String getDisplayName() {
-            return "Visualize test results in real time";
+            return Messages.PerJobConfiguration_visualize_test_results_in_real_time();
         }
 
     }

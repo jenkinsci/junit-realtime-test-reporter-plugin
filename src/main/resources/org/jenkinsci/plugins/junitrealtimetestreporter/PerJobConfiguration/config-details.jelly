@@ -25,4 +25,4 @@ THE SOFTWARE.
 
 <?jelly escape-by-default='true'?>
 <j:jelly xmlns:j="jelly:core"/>
-<!-- TODO OptionalJobProperty/config.jelly should include with optional=true -->
+<!-- TODO JENKINS-46663 should be unnecessary -->

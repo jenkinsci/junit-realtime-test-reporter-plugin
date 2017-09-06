@@ -91,24 +91,28 @@ public class PipelineAttacher implements GraphListener {
                             return;
                         }
                         LOGGER.log(Level.FINE, "encountered {0} in {1} entering {2}", new Object[] {workspace, run, node2.getDisplayFunctionName()});
-                        Run<?, ?> last = job.getLastSuccessfulBuild();
-                        if (!(last instanceof FlowExecutionOwner.Executable)) {
+                        Run<?, ?> lastSuccessfulBuild = job.getLastSuccessfulBuild();
+                        if (lastSuccessfulBuild == null) {
                             LOGGER.log(Level.FINE, "no lastSuccessfulBuild in {0}", job);
                             return;
                         }
-                        FlowExecutionOwner owner = ((FlowExecutionOwner.Executable) last).asFlowExecutionOwner();
-                        if (owner == null) {
-                            LOGGER.log(Level.WARNING, "could not get FlowExecutionOwner from {0}", last);
+                        if (!(lastSuccessfulBuild instanceof FlowExecutionOwner.Executable)) {
+                            LOGGER.log(Level.WARNING, "unexpected {0} in {1}", new Object[] {lastSuccessfulBuild, job});
                             return;
                         }
-                        FlowExecution exec = owner.getOrNull();
-                        if (exec == null) {
-                            LOGGER.log(Level.WARNING, "could not get FlowExecution from {0}", owner);
+                        FlowExecutionOwner lastSuccessfulOwner = ((FlowExecutionOwner.Executable) lastSuccessfulBuild).asFlowExecutionOwner();
+                        if (lastSuccessfulOwner == null) {
+                            LOGGER.log(Level.WARNING, "could not get FlowExecutionOwner from {0}", lastSuccessfulBuild);
+                            return;
+                        }
+                        FlowExecution lastSuccessfulExec = lastSuccessfulOwner.getOrNull();
+                        if (lastSuccessfulExec == null) {
+                            LOGGER.log(Level.WARNING, "could not get FlowExecution from {0}", lastSuccessfulOwner);
                             return;
                         }
                         boolean keepLongStdio = false;
-                        Set<String> globs = new TreeSet<String>();
-                        for (FlowNode n : new DepthFirstScanner().allNodes(exec)) {
+                        Set<String> globs = new TreeSet<>();
+                        for (FlowNode n : new DepthFirstScanner().allNodes(lastSuccessfulExec)) {
                             if (n instanceof StepNode && ((StepNode) n).getDescriptor().getFunctionName().equals("step")) {
                                 Object delegate = ArgumentsAction.getResolvedArguments(n).get("delegate");
                                 if (delegate instanceof UninstantiatedDescribable) {
@@ -186,7 +190,11 @@ public class PipelineAttacher implements GraphListener {
 
         @Override
         public String getDisplayName() {
-            return "Realtime Test Result on " + (node.isEmpty() ? "master" : node);
+            if (node.isEmpty()) {
+                return Messages.PipelineAttacher_realtime_test_result_on_master();
+            } else {
+                return Messages.PipelineAttacher_realtime_test_result_on_(node);
+            }
         }
 
         @Override
