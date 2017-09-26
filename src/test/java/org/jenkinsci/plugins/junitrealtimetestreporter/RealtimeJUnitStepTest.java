@@ -30,6 +30,7 @@ import java.util.logging.Level;
 import org.jenkinsci.plugins.workflow.cps.CpsFlowDefinition;
 import org.jenkinsci.plugins.workflow.job.WorkflowJob;
 import org.jenkinsci.plugins.workflow.job.WorkflowRun;
+import org.jenkinsci.plugins.workflow.steps.StepConfigTester;
 import org.jenkinsci.plugins.workflow.test.steps.SemaphoreStep;
 import org.junit.ClassRule;
 import org.junit.Test;
@@ -40,7 +41,7 @@ import org.jvnet.hudson.test.BuildWatcher;
 import org.jvnet.hudson.test.LoggerRule;
 import org.jvnet.hudson.test.RestartableJenkinsRule;
 
-public class PipelineAttacherTest {
+public class RealtimeJUnitStepTest {
 
     @ClassRule
     public static BuildWatcher buildWatcher = new BuildWatcher();
@@ -49,7 +50,7 @@ public class PipelineAttacherTest {
     public RestartableJenkinsRule rr = new RestartableJenkinsRule();
 
     @Rule
-    public LoggerRule logging = new LoggerRule().record(PipelineAttacher.class, Level.FINER).record(AbstractRealtimeTestResultAction.class, Level.FINE);
+    public LoggerRule logging = new LoggerRule().record(RealtimeJUnitStep.class, Level.FINER).record(AbstractRealtimeTestResultAction.class, Level.FINE);
 
     @Test
     public void smokes() {
@@ -58,14 +59,14 @@ public class PipelineAttacherTest {
             public void evaluate() throws Throwable {
                 WorkflowJob p = rr.j.jenkins.createProject(WorkflowJob.class, "p");
                 p.setDefinition(new CpsFlowDefinition(
-                    "properties([realTimeJUnitReports()])\n" +
                     "node {\n" +
-                    "  semaphore 'pre'\n" +
-                    "  writeFile text: '''<testsuite name='a'><testcase name='a1'/><testcase name='a2'/></testsuite>''', file: 'a.xml'\n" +
-                    "  semaphore 'mid'\n" +
-                    "  writeFile text: '''<testsuite name='b'><testcase name='b1'/><testcase name='b2'><error>b2 failed</error></testcase></testsuite>''', file: 'b.xml'\n" +
-                    "  semaphore 'post'\n" +
-                    "  junit '*.xml'\n" +
+                    "  realtimeJUnit('*.xml') {\n" +
+                    "    semaphore 'pre'\n" +
+                    "    writeFile text: '''<testsuite name='a'><testcase name='a1'/><testcase name='a2'/></testsuite>''', file: 'a.xml'\n" +
+                    "    semaphore 'mid'\n" +
+                    "    writeFile text: '''<testsuite name='b'><testcase name='b1'/><testcase name='b2'><error>b2 failed</error></testcase></testsuite>''', file: 'b.xml'\n" +
+                    "    semaphore 'post'\n" +
+                    "  }\n" +
                     "  deleteDir()\n" +
                     "}; semaphore 'final'", true));
                 SemaphoreStep.success("pre/1", null);
@@ -124,6 +125,20 @@ public class PipelineAttacherTest {
         });
     }
 
-    // TODO test distinct globs, parallel, repeated archiving
+    @Test
+    public void ui() {
+        rr.addStep(new Statement() {
+            @Override
+            public void evaluate() throws Throwable {
+                StepConfigTester t = new StepConfigTester(rr.j);
+                RealtimeJUnitStep s = new RealtimeJUnitStep("*.xml");
+                rr.j.assertEqualDataBoundBeans(s, t.configRoundTrip(s));
+                s.setKeepLongStdio(true);
+                rr.j.assertEqualDataBoundBeans(s, t.configRoundTrip(s));
+            }
+        });
+    }
+
+    // TODO test distinct parallel / repeated archiving
 
 }

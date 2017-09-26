@@ -24,17 +24,17 @@
 package org.jenkinsci.plugins.junitrealtimetestreporter;
 
 import hudson.Extension;
-import hudson.model.Job;
+import hudson.model.AbstractProject;
 import jenkins.model.OptionalJobProperty;
 import org.jenkinsci.Symbol;
 import org.kohsuke.stapler.DataBoundConstructor;
 
-public class PerJobConfiguration extends OptionalJobProperty<Job<?,?>> {
+public class PerJobConfiguration extends OptionalJobProperty<AbstractProject<?,?>> {
 
     @DataBoundConstructor
     public PerJobConfiguration() {}
 
-    public static boolean isActive(Job<?, ?> project) {
+    public static boolean isActive(AbstractProject<?, ?> project) {
         return project.getProperty(PerJobConfiguration.class) != null;
     }
 
