@@ -24,57 +24,28 @@
 package org.jenkinsci.plugins.junitrealtimetestreporter;
 
 import hudson.Extension;
-import hudson.model.JobProperty;
-import hudson.model.JobPropertyDescriptor;
 import hudson.model.AbstractProject;
-import hudson.model.Job;
-import net.sf.json.JSONObject;
+import jenkins.model.OptionalJobProperty;
+import org.jenkinsci.Symbol;
+import org.kohsuke.stapler.DataBoundConstructor;
 
-import org.kohsuke.stapler.StaplerRequest;
+public class PerJobConfiguration extends OptionalJobProperty<AbstractProject<?,?>> {
 
-public class PerJobConfiguration extends JobProperty<Job<?,?>> {
+    @DataBoundConstructor
+    public PerJobConfiguration() {}
 
-    private static final PerJobConfiguration DEFAULT = new PerJobConfiguration(false);
-    private static final PerJobConfiguration REPORTING = new PerJobConfiguration(true);
-
-    public final boolean reportInRealtime;
-
-    private PerJobConfiguration(boolean reportInRealtime) {
-
-        this.reportInRealtime = reportInRealtime;
+    public static boolean isActive(AbstractProject<?, ?> project) {
+        return project.getProperty(PerJobConfiguration.class) != null;
     }
 
-    /*package*/ static PerJobConfiguration getConfig(final AbstractProject<?, ?> project) {
-
-        final PerJobConfiguration property = project.getProperty(PerJobConfiguration.class);
-        return property != null ? property : DEFAULT;
-    }
-
+    @Symbol("realTimeJUnitReports")
     @Extension
-    public static class Descriptor extends JobPropertyDescriptor {
-
-        @Override
-        public boolean isApplicable(
-                @SuppressWarnings("rawtypes") Class<? extends Job> jobType
-        ) {
-            return true;
-        }
+    public static class Descriptor extends OptionalJobPropertyDescriptor {
 
         @Override
         public String getDisplayName() {
-            return "Realtime test result report";
+            return Messages.PerJobConfiguration_visualize_test_results_in_real_time();
         }
 
-        @Override
-        public JobProperty<?> newInstance(
-                StaplerRequest req, JSONObject formData
-        ) throws FormException {
-
-            if (formData.isNullObject()) return null;
-
-            if (!formData.has("reportInRealtime")) return null;
-
-            return REPORTING;
-        }
     }
 }

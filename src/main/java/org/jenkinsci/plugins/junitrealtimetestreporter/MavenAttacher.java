@@ -65,9 +65,10 @@ public class MavenAttacher extends MavenReporter {
 
         public Void call(MavenBuild build) throws IOException, InterruptedException {
 
-            if (RealtimeTestResultAction.getConfig(build).reportInRealtime) {
+            if (PerJobConfiguration.isActive(build.getParent())) {
 
-                build.addAction(new RealtimeTestResultAction(build));
+                build.addAction(new RealtimeTestResultAction());
+                AbstractRealtimeTestResultAction.saveBuild(build);
             }
             return null;
         }
@@ -77,7 +78,7 @@ public class MavenAttacher extends MavenReporter {
 
         public Void call(MavenBuild build) throws IOException, InterruptedException {
 
-            if (RealtimeTestResultAction.getConfig(build).reportInRealtime) {
+            if (PerJobConfiguration.isActive(build.getParent())) {
 
                 RealtimeTestResultAction.detachFrom(build);
             }
@@ -85,7 +86,7 @@ public class MavenAttacher extends MavenReporter {
         }
     }
 
-    @Extension
+    @Extension(optional = true)
     public static class Descriptor extends MavenReporterDescriptor {
 
         @Override

@@ -23,30 +23,21 @@
  */
 package org.jenkinsci.plugins.junitrealtimetestreporter;
 
-import hudson.AbortException;
 import hudson.Util;
-import hudson.matrix.MatrixRun;
 import hudson.matrix.MatrixBuild;
-import hudson.maven.MavenBuild;
-import hudson.maven.MavenModuleSetBuild;
-import hudson.model.Action;
 import hudson.model.AbstractBuild;
 import hudson.model.AbstractProject;
+import hudson.model.Action;
 import hudson.tasks.junit.JUnitParser;
 import hudson.tasks.junit.TestResultAction;
 import hudson.tasks.junit.JUnitResultArchiver;
-import hudson.tasks.test.AbstractTestResultAction;
 import hudson.tasks.test.TestResult;
 
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
-import java.util.logging.Level;
 import java.util.logging.Logger;
-
-import org.kohsuke.stapler.HttpRedirect;
-import org.kohsuke.stapler.StaplerProxy;
 
 /**
  * Action attached to the build at the time of running displaying test results in real time.
@@ -59,105 +50,26 @@ import org.kohsuke.stapler.StaplerProxy;
  *
  * @author ogondza
  */
-public class RealtimeTestResultAction extends AbstractTestResultAction<RealtimeTestResultAction> implements StaplerProxy {
+public class RealtimeTestResultAction extends AbstractRealtimeTestResultAction {
 
     private static final Logger LOGGER = Logger.getLogger(RealtimeTestResultAction.class.getName());
 
-    private transient TestResult result;
-    private transient long updated;
-
-    public RealtimeTestResultAction(final AbstractBuild<?, ?> owner) {
-
-        super(owner);
-    }
-
-    @Override
-    public TestResult getResult() {
-
-        // Refresh every 1/100 of a job estimated duration but not more often than every 5 seconds
-        final long thrashold = Math.max(5000, owner.getEstimatedDuration() / 100);
-        if (updated > System.currentTimeMillis() - thrashold) {
-            LOGGER.fine("Cache hit");
-            return result;
-        }
-
-        result = parse();
-        updated = System.currentTimeMillis();
-        return result;
-    }
-
-    @Override
-    public int getFailCount() {
-
-        if (getResult() == null) return 0;
-        return getResult().getFailCount();
-    }
-
-    @Override
-    public int getTotalCount() {
-
-        if (getResult() == null) return 0;
-        return getResult().getTotalCount();
-    }
-
-    public TestResult getTarget() {
-
-        if (!owner.isBuilding()) {
-            LOGGER.warning("Dangling RealtimeTestResultAction on " + owner + ". Probably not finalized correctly.");
-            detachFrom(owner);
-            throw new HttpRedirect(owner.getUrl());
-        }
-
-        if (getResult() != null) return getResult();
-
-        return new NullTestResult(this);
-    }
+    public RealtimeTestResultAction() {}
 
     @Override
     public String getDisplayName() {
-
         return "Realtime Test Result";
     }
 
     @Override
     public String getUrlName() {
-
         return "realtimeTestReport";
     }
 
     @Override
-    public String getIconFileName() {
-
-        return super.getIconFileName();
-    }
-
-    private TestResult parse() {
-
+    protected TestResult parse() throws IOException, InterruptedException {
         final JUnitResultArchiver archiver = getArchiver(this.owner);
-
-        try {
-
-            final long started = System.currentTimeMillis();
-            final TestResult result = new JUnitParser(archiver.isKeepLongStdio())
-                    .parse(getGlob(archiver), this.owner, null, null)
-            ;
-            LOGGER.log(Level.INFO, "Parsing took {0} ms", System.currentTimeMillis() - started);
-
-            result.setParentAction(this);
-            return result;
-        } catch (AbortException ex) {
-            // Thrown when there are no reports or no workspace witch is normal
-            // at the beginning the build. This is also a signal that there are
-            // no reports to update (already parsed was excluded and no new have
-            // arrived so far).
-            LOGGER.fine("No new reports found.");
-        } catch (InterruptedException ex) {
-            LOGGER.log(Level.WARNING, "Unable to parse", ex);
-        } catch (IOException ex) {
-            LOGGER.log(Level.WARNING, "Unable to parse", ex);
-        }
-
-        return null;
+        return new JUnitParser(archiver.isKeepLongStdio(), /* TODO really?! */false).parse(getGlob(archiver), this.owner, null, null);
     }
 
     private String getGlob(final JUnitResultArchiver archiver) {
@@ -180,22 +92,15 @@ public class RealtimeTestResultAction extends AbstractTestResultAction<RealtimeT
 
     /*package*/ static JUnitResultArchiver getArchiver(AbstractBuild<?, ?> build) {
 
-        if (build instanceof MavenModuleSetBuild || build instanceof MavenBuild) return new DummyArchiver();
+        if (build.getClass().getName().equals("hudson.maven.MavenModuleSetBuild") || build.getClass().getName().equals("hudson.maven.MavenBuild")) {
+            return new DummyArchiver();
+        }
 
         return getProject(build).getPublishersList().get(JUnitResultArchiver.class);
     }
 
     private static AbstractProject<?, ?> getProject(AbstractBuild<?, ?> build) {
-
-        if (build instanceof MavenBuild) return getProject(((MavenBuild) build).getRootBuild());
-        if (build instanceof MatrixRun) return getProject(((MatrixRun) build).getRootBuild());
-
-        return build.getProject();
-    }
-
-    /*package*/ static PerJobConfiguration getConfig(AbstractBuild<?, ?> build) {
-
-        return PerJobConfiguration.getConfig(getProject(build));
+        return build.getRootBuild().getParent();
     }
 
     /*package*/ static void detachFrom(final AbstractBuild<?, ?> build) {
