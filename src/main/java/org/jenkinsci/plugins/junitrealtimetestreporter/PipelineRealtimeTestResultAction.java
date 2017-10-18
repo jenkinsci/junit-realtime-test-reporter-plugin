@@ -56,6 +56,7 @@ class PipelineRealtimeTestResultAction extends AbstractRealtimeTestResultAction 
             return Messages.PipelineRealtimeTestResultAction_realtime_test_result_on_master();
         } else {
             return Messages.PipelineRealtimeTestResultAction_realtime_test_result_on_(node);
+            // TODO include the branch or stage name (nearest enclosing LabelAction), as in jenkinsci/workflow-durable-task-step-plugin#2
         }
     }
 

@@ -154,6 +154,7 @@ public class RealtimeJUnitStep extends Step {
 
         @Override
         protected void finished(StepContext context) throws Exception {
+            // TODO extend BodyExecutionCallback directly and in the case of onFailure, call archiver.setAllowEmptyResults(true)
             Run<?, ?> r = context.get(Run.class);
             for (PipelineRealtimeTestResultAction a : r.getActions(PipelineRealtimeTestResultAction.class)) {
                 if (a.id.equals(id)) {
@@ -163,6 +164,7 @@ public class RealtimeJUnitStep extends Step {
                     break;
                 }
             }
+            // TODO might block CPS VM thread. Not trivial to solve: JENKINS-43276
             archiver.perform(r, context.get(FilePath.class), context.get(Launcher.class), context.get(TaskListener.class));
         }
 
