@@ -140,6 +140,11 @@
       <artifactId>mailer</artifactId>
       <version>1.20</version>
     </dependency>
+    <dependency>
+      <groupId>org.jenkins-ci.plugins</groupId>
+      <artifactId>credentials</artifactId>
+      <version>2.1.11</version>
+    </dependency>
   </dependencies>
 
   <repositories>
