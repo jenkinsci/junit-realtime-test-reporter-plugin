@@ -24,6 +24,7 @@
 package org.jenkinsci.plugins.junitrealtimetestreporter;
 
 import hudson.model.Result;
+import hudson.slaves.DumbSlave;
 import hudson.tasks.junit.TestResultAction;
 import java.util.Collections;
 import java.util.logging.Level;
@@ -50,7 +51,7 @@ public class RealtimeJUnitStepTest {
     public RestartableJenkinsRule rr = new RestartableJenkinsRule();
 
     @Rule
-    public LoggerRule logging = new LoggerRule().record(RealtimeJUnitStep.class, Level.FINER).record(AbstractRealtimeTestResultAction.class, Level.FINE);
+    public LoggerRule logging = new LoggerRule().record(RealtimeJUnitStep.class.getPackage().getName(), Level.FINER);
 
     @Test
     public void smokes() {
@@ -121,6 +122,41 @@ public class RealtimeJUnitStepTest {
                 assertEquals(4, a.getTotalCount());
                 assertEquals(1, a.getFailCount());
                 assertEquals(Collections.emptyList(), b2.getActions(AbstractRealtimeTestResultAction.class));
+            }
+        });
+    }
+
+    @Test
+    public void brokenConnection() {
+        rr.addStep(new Statement() {
+            @Override
+            public void evaluate() throws Throwable {
+                DumbSlave s = rr.j.createSlave("remote", null, null);
+                WorkflowJob p = rr.j.jenkins.createProject(WorkflowJob.class, "p");
+                p.setDefinition(new CpsFlowDefinition(
+                    "node('remote') {\n" +
+                    "  realtimeJUnit('*.xml') {\n" +
+                    "    writeFile text: '''<testsuite name='a'><testcase name='a1'/><testcase name='a2'/></testsuite>''', file: 'a.xml'\n" +
+                    "    writeFile text: '''<testsuite name='b'><testcase name='b1'/><testcase name='b2'><error>b2 failed</error></testcase></testsuite>''', file: 'b.xml'\n" +
+                    "    semaphore 'end'\n" +
+                    "    archive 'a.xml'\n" + // should fail, so JUnit archiving will be a suppressed exception; otherwise would be primary
+                    "  }\n" +
+                    "}", true));
+                WorkflowRun b1 = p.scheduleBuild2(0).waitForStart();
+                SemaphoreStep.waitForStart("end/1", b1);
+                assertNull(b1.getAction(TestResultAction.class));
+                AbstractRealtimeTestResultAction rta = b1.getAction(AbstractRealtimeTestResultAction.class);
+                assertNotNull(rta);
+                assertEquals(4, rta.getTotalCount()); // as a side effect, ensures cache has been populated
+                assertEquals(1, rta.getFailCount());
+                s.toComputer().getChannel().close();
+                SemaphoreStep.success("end/1", null);
+                rr.j.assertBuildStatus(Result.FAILURE, rr.j.waitForCompletion(b1));
+                assertEquals(Collections.emptyList(), b1.getActions(AbstractRealtimeTestResultAction.class));
+                TestResultAction a = b1.getAction(TestResultAction.class);
+                assertNotNull(a);
+                assertEquals(4, a.getTotalCount());
+                assertEquals(1, a.getFailCount());
             }
         });
     }

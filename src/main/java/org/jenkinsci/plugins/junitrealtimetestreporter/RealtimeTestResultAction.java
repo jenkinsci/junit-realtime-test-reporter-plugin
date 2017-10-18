@@ -31,7 +31,7 @@ import hudson.model.Action;
 import hudson.tasks.junit.JUnitParser;
 import hudson.tasks.junit.TestResultAction;
 import hudson.tasks.junit.JUnitResultArchiver;
-import hudson.tasks.test.TestResult;
+import hudson.tasks.junit.TestResult;
 
 import java.io.IOException;
 import java.util.Arrays;

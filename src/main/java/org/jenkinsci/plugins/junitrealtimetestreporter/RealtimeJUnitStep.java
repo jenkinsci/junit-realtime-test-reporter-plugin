@@ -33,6 +33,8 @@ import hudson.model.Run;
 import hudson.model.TaskListener;
 import hudson.tasks.junit.JUnitResultArchiver;
 import hudson.tasks.junit.TestDataPublisher;
+import hudson.tasks.junit.TestResult;
+import hudson.tasks.junit.TestResultAction;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
@@ -142,7 +144,7 @@ public class RealtimeJUnitStep extends Step {
 
     }
 
-    static class Callback extends BodyExecutionCallback.TailCall {
+    static class Callback extends BodyExecutionCallback {
 
         private final String id;
         private final JUnitResultArchiver archiver;
@@ -152,20 +154,54 @@ public class RealtimeJUnitStep extends Step {
             this.archiver = archiver;
         }
 
+        // TODO would be helpful to have a TailCall.finished overload taking success parameter
         @Override
-        protected void finished(StepContext context) throws Exception {
-            // TODO extend BodyExecutionCallback directly and in the case of onFailure, call archiver.setAllowEmptyResults(true)
+        public void onSuccess(StepContext context, Object result) {
+            try {
+                finished(context, true);
+            } catch (Exception x) {
+                context.onFailure(x);
+                return;
+            }
+            context.onSuccess(result);
+        }
+
+        @Override
+        public void onFailure(StepContext context, Throwable t) {
+            try {
+                finished(context, false);
+            } catch (Exception x) {
+                t.addSuppressed(x);
+            }
+            context.onFailure(t);
+        }
+
+        private void finished(StepContext context, boolean success) throws Exception {
             Run<?, ?> r = context.get(Run.class);
+            TestResult provisional = null;
             for (PipelineRealtimeTestResultAction a : r.getActions(PipelineRealtimeTestResultAction.class)) {
                 if (a.id.equals(id)) {
+                    provisional = a.getResult();
                     r.removeAction(a);
                     LOGGER.log(Level.FINE, "clearing {0} from {1}", new Object[] {id, r});
                     AbstractRealtimeTestResultAction.saveBuild(r);
                     break;
                 }
             }
-            // TODO might block CPS VM thread. Not trivial to solve: JENKINS-43276
-            archiver.perform(r, context.get(FilePath.class), context.get(Launcher.class), context.get(TaskListener.class));
+            if (!success) {
+                archiver.setAllowEmptyResults(true);
+            }
+            TaskListener listener = context.get(TaskListener.class);
+            try {
+                // TODO might block CPS VM thread. Not trivial to solve: JENKINS-43276
+                archiver.perform(r, context.get(FilePath.class), context.get(Launcher.class), listener);
+            } catch (Exception x) {
+                if (provisional != null) {
+                    listener.getLogger().println("Final archiving failed; recording " + provisional.getTotalCount() + " provisional test results.");
+                    r.addAction(new TestResultAction(r, provisional, listener));
+                }
+                throw x;
+            }
         }
 
         private static final long serialVersionUID = 1;

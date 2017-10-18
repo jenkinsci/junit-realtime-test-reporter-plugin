@@ -24,9 +24,10 @@
 
 package org.jenkinsci.plugins.junitrealtimetestreporter;
 
+import hudson.AbortException;
 import hudson.FilePath;
 import hudson.tasks.junit.JUnitParser;
-import hudson.tasks.test.TestResult;
+import hudson.tasks.junit.TestResult;
 import java.io.IOException;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -72,8 +73,7 @@ class PipelineRealtimeTestResultAction extends AbstractRealtimeTestResultAction 
             LOGGER.log(Level.FINE, "parsing {0} in {1} on node {2} for {3}", new Object[] {glob, workspace, node, run});
             return new JUnitParser(keepLongStdio, true).parseResult(glob, run, ws, null, null);
         } else {
-            LOGGER.log(Level.FINE, "skipping parse in nonexistent workspace for {0}", run);
-            return new hudson.tasks.junit.TestResult();
+            throw new AbortException("skipping parse in nonexistent workspace for " +  run);
         }
     }
 
