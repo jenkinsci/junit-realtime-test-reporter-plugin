@@ -3,7 +3,7 @@
   <parent>
     <groupId>org.jenkins-ci.plugins</groupId>
     <artifactId>plugin</artifactId>
-    <version>2.30</version> <!-- TODO 2.33+ once https://github.com/jenkinsci/maven-plugin/pull/102 is released -->
+    <version>2.36</version>
     <relativePath />
   </parent>
 
@@ -46,20 +46,8 @@
     <dependency>
       <groupId>org.jenkins-ci.main</groupId>
       <artifactId>maven-plugin</artifactId>
-      <version>2.0</version>
+      <version>3.0</version>
       <optional>true</optional>
-    </dependency>
-    <!-- Exclude sisu-guice we do not care for to make enforcer happy -->
-    <dependency>
-      <groupId>org.jenkins-ci.main</groupId>
-      <artifactId>jenkins-core</artifactId>
-      <version>${jenkins.version}</version>
-      <exclusions>
-        <exclusion>
-          <groupId>org.sonatype.sisu</groupId>
-          <artifactId>sisu-guice</artifactId>
-        </exclusion>
-      </exclusions>
     </dependency>
     <dependency>
       <groupId>org.jenkins-ci.plugins</groupId>
