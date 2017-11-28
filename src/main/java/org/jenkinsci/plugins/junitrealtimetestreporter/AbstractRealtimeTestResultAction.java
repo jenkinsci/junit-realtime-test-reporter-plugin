@@ -26,8 +26,8 @@ package org.jenkinsci.plugins.junitrealtimetestreporter;
 import hudson.AbortException;
 import hudson.Main;
 import hudson.model.Run;
+import hudson.tasks.junit.TestResult;
 import hudson.tasks.test.AbstractTestResultAction;
-import hudson.tasks.test.TestResult;
 import java.io.IOException;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -49,6 +49,10 @@ abstract class AbstractRealtimeTestResultAction extends AbstractTestResultAction
     public TestResult getResult() {
         // Refresh every 1/100 of a job estimated duration but not more often than every 5 seconds
         final long threshold = Math.max(5000, run.getEstimatedDuration() / 100);
+        // TODO possible improvements:
+        // · always run parse in case result == null
+        // · run parse regardless of cache if result.getTotalCount() == 0
+        // · refresh no less often than every 1m even if job is estimated to take >100m
         if (updated > System.currentTimeMillis() - threshold && !Main.isUnitTest) {
             LOGGER.fine("Cache hit");
             return result;
@@ -58,7 +62,9 @@ abstract class AbstractRealtimeTestResultAction extends AbstractTestResultAction
             // TODO this can block on Remoting and hang the UI; need to refresh results asynchronously
             result = parse();
             result.setParentAction(this);
-            LOGGER.log(Level.FINE, "Parsing took {0} ms", System.currentTimeMillis() - started);
+            if (LOGGER.isLoggable(Level.FINE)) {
+                LOGGER.log(Level.FINE, "Parsing of {0} test results took {1}ms", new Object[] {result.getTotalCount(), System.currentTimeMillis() - started});
+            }
             updated = System.currentTimeMillis();
         } catch (AbortException ex) {
             // Thrown when there are no reports or no workspace witch is normal
@@ -100,7 +106,7 @@ abstract class AbstractRealtimeTestResultAction extends AbstractTestResultAction
         if (getResult() != null) {
             return getResult();
         }
-        return new NullTestResult(this);
+        return new TestResult();
     }
 
     static void saveBuild(Run<?, ?> build) {
