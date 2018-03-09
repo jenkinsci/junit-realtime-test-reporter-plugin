@@ -29,12 +29,16 @@ import hudson.Extension;
 import hudson.FilePath;
 import hudson.Launcher;
 import hudson.model.Descriptor;
+import hudson.model.Result;
 import hudson.model.Run;
 import hudson.model.TaskListener;
 import hudson.tasks.junit.JUnitResultArchiver;
 import hudson.tasks.junit.TestDataPublisher;
 import hudson.tasks.junit.TestResult;
 import hudson.tasks.junit.TestResultAction;
+import hudson.tasks.junit.pipeline.JUnitResultsStepExecution;
+import hudson.tasks.test.PipelineTestDetails;
+
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
@@ -193,8 +197,24 @@ public class RealtimeJUnitStep extends Step {
             }
             TaskListener listener = context.get(TaskListener.class);
             try {
+                FilePath workspace = context.get(FilePath.class);
+                workspace.mkdirs();
+                Launcher launcher = context.get(Launcher.class);
+                FlowNode node = context.get(FlowNode.class);
+
+                List<FlowNode> enclosingBlocks = JUnitResultsStepExecution.getEnclosingStagesAndParallels(node);
+
+                PipelineTestDetails pipelineTestDetails = new PipelineTestDetails();
+                pipelineTestDetails.setNodeId(id);
+                pipelineTestDetails.setEnclosingBlocks(JUnitResultsStepExecution.getEnclosingBlockIds(enclosingBlocks));
+                pipelineTestDetails.setEnclosingBlockNames(JUnitResultsStepExecution.getEnclosingBlockNames(enclosingBlocks));
+
                 // TODO might block CPS VM thread. Not trivial to solve: JENKINS-43276
-                archiver.perform(r, context.get(FilePath.class), context.get(Launcher.class), listener);
+                TestResultAction action = JUnitResultArchiver.parseAndAttach(archiver, pipelineTestDetails, r, workspace, launcher, listener);
+
+                if (action != null && action.getResult().getFailCount() > 0) {
+                    r.setResult(Result.UNSTABLE);
+                }
             } catch (Exception x) {
                 if (provisional != null) {
                     listener.getLogger().println("Final archiving failed; recording " + provisional.getTotalCount() + " provisional test results.");
