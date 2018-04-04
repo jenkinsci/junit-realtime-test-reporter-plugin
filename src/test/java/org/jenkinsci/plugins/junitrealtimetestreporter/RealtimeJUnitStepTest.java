@@ -25,10 +25,21 @@ package org.jenkinsci.plugins.junitrealtimetestreporter;
 
 import hudson.model.Result;
 import hudson.slaves.DumbSlave;
+import hudson.tasks.junit.TestResult;
 import hudson.tasks.junit.TestResultAction;
 import java.util.Collections;
 import java.util.logging.Level;
+
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
+
+import org.jenkinsci.plugins.workflow.actions.LabelAction;
+import org.jenkinsci.plugins.workflow.actions.ThreadNameAction;
 import org.jenkinsci.plugins.workflow.cps.CpsFlowDefinition;
+import org.jenkinsci.plugins.workflow.flow.FlowExecution;
+import org.jenkinsci.plugins.workflow.flow.FlowExecutionOwner;
+import org.jenkinsci.plugins.workflow.graph.FlowNode;
+import org.jenkinsci.plugins.workflow.graphanalysis.DepthFirstScanner;
 import org.jenkinsci.plugins.workflow.job.WorkflowJob;
 import org.jenkinsci.plugins.workflow.job.WorkflowRun;
 import org.jenkinsci.plugins.workflow.steps.StepConfigTester;
@@ -41,6 +52,8 @@ import org.junit.runners.model.Statement;
 import org.jvnet.hudson.test.BuildWatcher;
 import org.jvnet.hudson.test.LoggerRule;
 import org.jvnet.hudson.test.RestartableJenkinsRule;
+
+import com.google.common.base.Predicate;
 
 public class RealtimeJUnitStepTest {
 
@@ -175,6 +188,68 @@ public class RealtimeJUnitStepTest {
         });
     }
 
+    @Test
+    public void testResultDetails() {
+        rr.addStep(new Statement() {
+            @Override
+            public void evaluate() throws Throwable {
+                WorkflowJob p = rr.j.jenkins.createProject(WorkflowJob.class, "p");
+                p.setDefinition(new CpsFlowDefinition(
+                    "node {\n" +
+                    "  stage('stage1') {\n" +
+                    "    realtimeJUnit('a.xml') {\n" +
+                    "      writeFile text: '''<testsuite name='a'><testcase name='a1'/><testcase name='a2'/></testsuite>''', file: 'a.xml'\n" +
+                    "    }\n" +
+                    "  }\n" +
+                    "  stage('stage2') {\n" +
+                    "    realtimeJUnit('b.xml') {\n" +
+                    "      writeFile text: '''<testsuite name='b'><testcase name='b1'/><testcase name='b2'><error>b2 failed</error></testcase></testsuite>''', file: 'b.xml'\n" +
+                    "    }\n" +
+                    "  }\n" +
+                    "}", true));
+                WorkflowRun b1 = rr.j.assertBuildStatus(Result.UNSTABLE, p.scheduleBuild2(0).get());
+                TestResultAction a = b1.getAction(TestResultAction.class);
+                assertNotNull(a);
+                assertEquals(4, a.getTotalCount());
+                assertEquals(1, a.getFailCount());
+                assertEquals(Collections.emptyList(), b1.getActions(AbstractRealtimeTestResultAction.class));
+                
+                FlowExecutionOwner owner = b1.asFlowExecutionOwner();
+                FlowExecution execution = owner.getOrNull();
+                DepthFirstScanner scanner = new DepthFirstScanner();
+                
+                FlowNode stage1Id = scanner.findFirstMatch(execution, new BlockNamePredicate("stage1"));
+                TestResult stage1Results = a.getResult().getResultForPipelineBlock(stage1Id.getId());
+                assertNotNull(stage1Results);
+                assertEquals(2, stage1Results.getTotalCount());
+                assertEquals(0, stage1Results.getFailCount());
+                
+                FlowNode stage2Id = scanner.findFirstMatch(execution, new BlockNamePredicate("stage2"));
+                TestResult stage2Results = a.getResult().getResultForPipelineBlock(stage2Id.getId());
+                assertNotNull(stage2Results);
+                assertEquals(2, stage2Results.getTotalCount());
+                assertEquals(1, stage2Results.getFailCount());
+            }
+        });
+    }
+
+    private static class BlockNamePredicate implements Predicate<FlowNode> {
+        private final String blockName;
+        public BlockNamePredicate(@Nonnull String blockName) {
+            this.blockName = blockName;
+        }
+        @Override
+        public boolean apply(@Nullable FlowNode input) {
+            if (input != null) {
+                LabelAction labelAction = input.getPersistentAction(LabelAction.class);
+                if (labelAction != null && labelAction instanceof ThreadNameAction) {
+                	return blockName.equals(((ThreadNameAction) labelAction).getThreadName());
+                }
+                return labelAction != null && blockName.equals(labelAction.getDisplayName());
+            }
+            return false;
+        }
+    }
     // TODO test distinct parallel / repeated archiving
 
 }
