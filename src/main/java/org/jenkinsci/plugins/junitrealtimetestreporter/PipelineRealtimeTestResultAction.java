@@ -26,29 +26,50 @@ package org.jenkinsci.plugins.junitrealtimetestreporter;
 
 import hudson.AbortException;
 import hudson.FilePath;
+import hudson.model.Run;
 import hudson.tasks.junit.JUnitParser;
 import hudson.tasks.junit.TestResult;
+import hudson.tasks.junit.pipeline.JUnitResultsStepExecution;
+
 import java.io.IOException;
+import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import org.jenkinsci.plugins.workflow.FilePathUtils;
 
-class PipelineRealtimeTestResultAction extends AbstractRealtimeTestResultAction {
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
+
+import org.jenkinsci.plugins.workflow.FilePathUtils;
+import org.jenkinsci.plugins.workflow.actions.LabelAction;
+import org.jenkinsci.plugins.workflow.actions.ThreadNameAction;
+import org.jenkinsci.plugins.workflow.flow.FlowExecution;
+import org.jenkinsci.plugins.workflow.flow.FlowExecutionOwner;
+import org.jenkinsci.plugins.workflow.graph.FlowNode;
+import org.jenkinsci.plugins.workflow.graphanalysis.DepthFirstScanner;
+import org.jenkinsci.plugins.workflow.steps.StepContext;
+
+import com.google.common.base.Predicate;
+
+public class PipelineRealtimeTestResultAction extends AbstractRealtimeTestResultAction {
 
     private static final Logger LOGGER = Logger.getLogger(PipelineRealtimeTestResultAction.class.getName());
 
     final String id;
     private final String node;
+    private final StepContext context;
     private final String workspace;
     private final boolean keepLongStdio;
     private final String glob;
+    private final Long parseInterval;
 
-    PipelineRealtimeTestResultAction(String id, FilePath ws, boolean keepLongStdio, String glob) {
+    /*package*/ PipelineRealtimeTestResultAction(String id, StepContext context, FilePath ws, boolean keepLongStdio, String glob, Long parseInterval) {
         this.id = id;
+        this.context = context;
         node = FilePathUtils.getNodeName(ws);
         workspace = ws.getRemote();
         this.keepLongStdio = keepLongStdio;
         this.glob = glob;
+        this.parseInterval = parseInterval;
     }
 
     @Override
@@ -67,6 +88,11 @@ class PipelineRealtimeTestResultAction extends AbstractRealtimeTestResultAction 
     }
 
     @Override
+    protected long getParseInterval() {
+        return parseInterval != null ? parseInterval.longValue() : super.getParseInterval();
+    }
+
+    @Override
     protected TestResult parse() throws IOException, InterruptedException {
         FilePath ws = FilePathUtils.find(node, workspace);
         if (ws != null && ws.isDirectory()) {
@@ -74,6 +100,58 @@ class PipelineRealtimeTestResultAction extends AbstractRealtimeTestResultAction 
             return new JUnitParser(keepLongStdio, true).parseResult(glob, run, ws, null, null);
         } else {
             throw new AbortException("skipping parse in nonexistent workspace for " +  run);
+        }
+    }
+
+    @Override
+    protected TestResult findPreviousTestResult() throws IOException, InterruptedException {
+        FlowNode node = context.get(FlowNode.class);
+
+        List<FlowNode> enclosingBlocks = JUnitResultsStepExecution.getEnclosingStagesAndParallels(node);
+        List<String> blockNames = JUnitResultsStepExecution.getEnclosingBlockNames(enclosingBlocks);
+        String blockName = !blockNames.isEmpty() ? blockNames.get(0) : null;
+
+        return findPreviousTestResult(run, blockName);
+    }
+
+    private static TestResult findPreviousTestResult(Run<?, ?> build, final String blockName) {
+        TestResult tr = findPreviousTestResult(build);
+        if (tr != null) {
+            Run<?, ?> prevRun = tr.getRun();
+            if (prevRun instanceof FlowExecutionOwner.Executable && blockName != null) {
+                FlowExecutionOwner owner = ((FlowExecutionOwner.Executable)prevRun).asFlowExecutionOwner();
+                if (owner != null) {
+                    FlowExecution execution = owner.getOrNull();
+                    if (execution != null) {
+                        DepthFirstScanner scanner = new DepthFirstScanner();
+                        FlowNode stageId = scanner.findFirstMatch(execution, new BlockNamePredicate(blockName));
+                        if (stageId != null) {
+                            tr = ((hudson.tasks.junit.TestResult) tr).getResultForPipelineBlock(stageId.getId());
+                        } else {
+                            tr = null;
+                        }
+                    }
+                }
+            }
+        }
+        return tr;
+    }
+
+    /*package*/ static class BlockNamePredicate implements Predicate<FlowNode> {
+        private final String blockName;
+        public BlockNamePredicate(@Nonnull String blockName) {
+            this.blockName = blockName;
+        }
+        @Override
+        public boolean apply(@Nullable FlowNode input) {
+            if (input != null) {
+                LabelAction labelAction = input.getPersistentAction(LabelAction.class);
+                if (labelAction != null && labelAction instanceof ThreadNameAction) {
+                    return blockName.equals(((ThreadNameAction) labelAction).getThreadName());
+                }
+                return labelAction != null && blockName.equals(labelAction.getDisplayName());
+            }
+            return false;
         }
     }
 

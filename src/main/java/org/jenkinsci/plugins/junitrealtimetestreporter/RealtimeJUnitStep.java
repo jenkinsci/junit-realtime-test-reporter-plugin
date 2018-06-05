@@ -68,12 +68,13 @@ public class RealtimeJUnitStep extends Step {
     private List<TestDataPublisher> testDataPublishers;
     private Double healthScaleFactor;
     private boolean allowEmptyResults;
+    private Long parseInterval;
 
     @DataBoundConstructor
     public RealtimeJUnitStep(String testResults) {
         this.testResults = testResults;
     }
-    
+
     public String getTestResults() {
         return testResults;
     }
@@ -115,6 +116,17 @@ public class RealtimeJUnitStep extends Step {
         this.allowEmptyResults = allowEmptyResults;
     }
 
+    public Long getParseInterval() {
+        return parseInterval;
+    }
+
+    @DataBoundSetter
+    public void setParseInterval(Long parseInterval) {
+        if (parseInterval == null || parseInterval.longValue() > 0) {
+            this.parseInterval = parseInterval;
+        }
+    }
+
     @Override
     public StepExecution start(StepContext context) throws Exception {
         JUnitResultArchiver delegate = new JUnitResultArchiver(testResults);
@@ -122,23 +134,25 @@ public class RealtimeJUnitStep extends Step {
         delegate.setHealthScaleFactor(getHealthScaleFactor());
         delegate.setKeepLongStdio(keepLongStdio);
         delegate.setTestDataPublishers(getTestDataPublishers());
-        return new Execution(context, delegate);
+        return new Execution(context, delegate, parseInterval);
     }
 
     static class Execution extends StepExecution {
 
         private final JUnitResultArchiver archiver;
+        private final Long parseInterval;
 
-        Execution(StepContext context, JUnitResultArchiver archiver) {
+        Execution(StepContext context, JUnitResultArchiver archiver, Long parseInterval) {
             super(context);
             this.archiver = archiver;
+            this.parseInterval = parseInterval;
         }
 
         @Override
         public boolean start() throws Exception {
             Run<?, ?> r = getContext().get(Run.class);
             String id = getContext().get(FlowNode.class).getId();
-            r.addAction(new PipelineRealtimeTestResultAction(id, getContext().get(FilePath.class), archiver.isKeepLongStdio(), archiver.getTestResults()));
+            r.addAction(new PipelineRealtimeTestResultAction(id, getContext(), getContext().get(FilePath.class), archiver.isKeepLongStdio(), archiver.getTestResults(), parseInterval));
             AbstractRealtimeTestResultAction.saveBuild(r);
             getContext().newBodyInvoker().withCallback(new Callback(id, archiver)).start();
             return false;

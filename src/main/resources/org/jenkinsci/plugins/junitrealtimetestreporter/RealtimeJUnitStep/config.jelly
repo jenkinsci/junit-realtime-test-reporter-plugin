@@ -24,8 +24,11 @@ THE SOFTWARE.
 -->
 
 <?jelly escape-by-default='true'?>
-<j:jelly xmlns:j="jelly:core" xmlns:st="jelly:stapler">
+<j:jelly xmlns:j="jelly:core" xmlns:st="jelly:stapler" xmlns:f="/lib/form">
     <!-- like f:property but without actually using a nested object (see main class for discussion): -->
-    <j:set var="descriptor" value="${descriptor.delegateDescriptor}"/>
-    <st:include from="${descriptor}" page="${descriptor.configPage}"/>
+    <j:set var="delegateDescriptor" value="${descriptor.delegateDescriptor}"/>
+    <st:include from="${delegateDescriptor}" page="${delegateDescriptor.configPage}"/>
+    <f:entry title="${%Parse Interval}" field="parseInterval">
+        <f:number/>
+    </f:entry>
 </j:jelly>
