@@ -33,6 +33,7 @@ import org.mockito.Mock;
 import org.mockito.Spy;
 import org.mockito.junit.MockitoJUnitRunner;
 
+import hudson.Main;
 import hudson.model.Run;
 import hudson.tasks.junit.TestResult;
 
@@ -47,6 +48,7 @@ public class AbstractRealtimeTestResultActionTest  {
 
     @Before
     public void init() throws Exception {
+        Main.isUnitTest = true;
         action.run = run;
 
         given(action.parse()).willReturn(new TestResult());
