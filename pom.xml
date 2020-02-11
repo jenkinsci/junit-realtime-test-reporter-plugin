@@ -13,13 +13,6 @@
   <name>JUnit Realtime Test Reporter Plugin</name>
   <url>https://wiki.jenkins-ci.org/display/JENKINS/JUnit+Realtime+Test+Reporter+Plugin</url>
 
-  <developers>
-    <developer>
-      <id>ogondza</id>
-      <name>Oliver Gondža</name>
-      <email>ogondza@gmail.com</email>
-    </developer>
-  </developers>
   <licenses>
     <license>
       <name>MIT License</name>
