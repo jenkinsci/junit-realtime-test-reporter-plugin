@@ -25,6 +25,7 @@
 package org.jenkinsci.plugins.junitrealtimetestreporter;
 
 import com.google.common.collect.ImmutableSet;
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import hudson.Extension;
 import hudson.FilePath;
 import hudson.Launcher;
@@ -125,6 +126,7 @@ public class RealtimeJUnitStep extends Step {
         return new Execution(context, delegate);
     }
 
+    @SuppressFBWarnings("SE_BAD_FIELD") // FIXME
     static class Execution extends StepExecution {
 
         private final JUnitResultArchiver archiver;
@@ -148,6 +150,7 @@ public class RealtimeJUnitStep extends Step {
 
     }
 
+    @SuppressFBWarnings("SE_BAD_FIELD") // FIXME
     static class Callback extends BodyExecutionCallback {
 
         private final String id;
