@@ -37,6 +37,7 @@ import hudson.tasks.junit.JUnitResultArchiver;
 import hudson.tasks.junit.TestDataPublisher;
 import hudson.tasks.junit.TestResult;
 import hudson.tasks.junit.TestResultAction;
+import hudson.tasks.junit.TestResultSummary;
 import hudson.tasks.junit.pipeline.JUnitResultsStepExecution;
 import hudson.tasks.test.PipelineTestDetails;
 
@@ -47,6 +48,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nonnull;
 import jenkins.model.Jenkins;
+import org.jenkinsci.plugins.workflow.actions.WarningAction;
 import org.jenkinsci.plugins.workflow.graph.FlowNode;
 import org.jenkinsci.plugins.workflow.pickles.Pickle;
 import org.jenkinsci.plugins.workflow.pickles.PickleFactory;
@@ -69,6 +71,7 @@ public class RealtimeJUnitStep extends Step {
     private List<TestDataPublisher> testDataPublishers;
     private Double healthScaleFactor;
     private boolean allowEmptyResults;
+    private boolean skipMarkingBuildUnstable;
 
     @DataBoundConstructor
     public RealtimeJUnitStep(String testResults) {
@@ -116,6 +119,15 @@ public class RealtimeJUnitStep extends Step {
         this.allowEmptyResults = allowEmptyResults;
     }
 
+    public boolean isSkipMarkingBuildUnstable() {
+        return skipMarkingBuildUnstable;
+    }
+
+    @DataBoundSetter
+    public void setSkipMarkingBuildUnstable(boolean skipMarkingBuildUnstable) {
+        this.skipMarkingBuildUnstable = skipMarkingBuildUnstable;
+    }
+
     @Override
     public StepExecution start(StepContext context) throws Exception {
         JUnitResultArchiver delegate = new JUnitResultArchiver(testResults);
@@ -123,6 +135,7 @@ public class RealtimeJUnitStep extends Step {
         delegate.setHealthScaleFactor(getHealthScaleFactor());
         delegate.setKeepLongStdio(keepLongStdio);
         delegate.setTestDataPublishers(getTestDataPublishers());
+        delegate.setSkipMarkingBuildUnstable(isSkipMarkingBuildUnstable());
         return new Execution(context, delegate);
     }
 
@@ -213,10 +226,16 @@ public class RealtimeJUnitStep extends Step {
                 pipelineTestDetails.setEnclosingBlockNames(JUnitResultsStepExecution.getEnclosingBlockNames(enclosingBlocks));
 
                 // TODO might block CPS VM thread. Not trivial to solve: JENKINS-43276
-                TestResultAction action = JUnitResultArchiver.parseAndAttach(archiver, pipelineTestDetails, r, workspace, launcher, listener);
+                TestResultSummary summary = JUnitResultArchiver.parseAndSummarize(archiver, pipelineTestDetails, r, workspace, launcher, listener);
 
-                if (action != null && action.getResult().getFailCount() > 0) {
-                    r.setResult(Result.UNSTABLE);
+                if (summary.getFailCount() > 0) {
+                    int testFailures = summary.getFailCount();
+                    if (testFailures > 0) {
+                        node.addOrReplaceAction(new WarningAction(Result.UNSTABLE).withMessage(testFailures + " tests failed"));
+                        if (!archiver.isSkipMarkingBuildUnstable()) {
+                            r.setResult(Result.UNSTABLE);
+                        }
+                    }
                 }
             } catch (Exception x) {
                 if (provisional != null) {
