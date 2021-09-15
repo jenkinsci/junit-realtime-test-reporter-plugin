@@ -28,6 +28,7 @@ import hudson.matrix.MatrixBuild;
 import hudson.model.AbstractBuild;
 import hudson.model.AbstractProject;
 import hudson.model.Action;
+import hudson.model.TaskListener;
 import hudson.tasks.junit.JUnitParser;
 import hudson.tasks.junit.TestResultAction;
 import hudson.tasks.junit.JUnitResultArchiver;
@@ -69,7 +70,7 @@ public class RealtimeTestResultAction extends AbstractRealtimeTestResultAction {
     @Override
     protected TestResult parse() throws IOException, InterruptedException {
         final JUnitResultArchiver archiver = getArchiver(this.owner);
-        return new JUnitParser(archiver.isKeepLongStdio(), true).parse(getGlob(archiver), this.owner, null, null);
+        return new JUnitParser(archiver.isKeepLongStdio(), true).parse(getGlob(archiver), this.owner, null, TaskListener.NULL);
     }
 
     private String getGlob(final JUnitResultArchiver archiver) {

@@ -27,6 +27,7 @@ package org.jenkinsci.plugins.junitrealtimetestreporter;
 import hudson.AbortException;
 import hudson.FilePath;
 import hudson.model.Run;
+import hudson.model.TaskListener;
 import hudson.tasks.junit.JUnitParser;
 import hudson.tasks.junit.TestResult;
 import hudson.tasks.junit.pipeline.JUnitResultsStepExecution;
@@ -97,7 +98,7 @@ public class PipelineRealtimeTestResultAction extends AbstractRealtimeTestResult
         FilePath ws = FilePathUtils.find(node, workspace);
         if (ws != null && ws.isDirectory()) {
             LOGGER.log(Level.FINE, "parsing {0} in {1} on node {2} for {3}", new Object[] {glob, workspace, node, run});
-            return new JUnitParser(keepLongStdio, true).parseResult(glob, run, ws, null, null);
+            return new JUnitParser(keepLongStdio, true).parseResult(glob, run, ws, null, TaskListener.NULL);
         } else {
             throw new AbortException("skipping parse in nonexistent workspace for " +  run);
         }
