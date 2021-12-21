@@ -29,6 +29,8 @@ import hudson.model.Run;
 import hudson.tasks.junit.TestResult;
 import hudson.tasks.test.AbstractTestResultAction;
 import java.io.IOException;
+import java.util.Collections;
+import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import org.kohsuke.stapler.HttpRedirect;
@@ -86,6 +88,15 @@ abstract class AbstractRealtimeTestResultAction extends AbstractTestResultAction
             return 0;
         }
         return getResult().getFailCount();
+    }
+
+    @Override
+    public List<? extends hudson.tasks.test.TestResult> getFailedTests() {
+        if (getResult() == null) {
+            return Collections.emptyList();
+        }
+
+        return getResult().getFailedTests();
     }
 
     @Override
