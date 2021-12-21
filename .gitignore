@@ -1,7 +1,5 @@
-/.*
-!.gitignore
-
-/work
-/target
-
+work
+target
+*.dylib
 *.iml
+.idea/
