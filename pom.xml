@@ -1,17 +1,17 @@
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/maven-v4_0_0.xsd">
   <modelVersion>4.0.0</modelVersion>
   <parent>
     <groupId>org.jenkins-ci.plugins</groupId>
     <artifactId>plugin</artifactId>
-    <version>4.19</version>
+    <version>4.31</version>
     <relativePath />
   </parent>
 
   <artifactId>junit-realtime-test-reporter</artifactId>
-  <version>0.7-SNAPSHOT</version>
+  <version>${changelist}</version>
   <packaging>hpi</packaging>
   <name>JUnit Realtime Test Reporter Plugin</name>
-  <url>https://wiki.jenkins-ci.org/display/JENKINS/JUnit+Realtime+Test+Reporter+Plugin</url>
+  <url>https://github.com/jenkinsci/junit-realtime-test-reporter-plugin</url>
 
   <licenses>
     <license>
@@ -20,14 +20,16 @@
     </license>
   </licenses>
   <scm>
-    <connection>scm:git:git://github.com/jenkinsci/${project.artifactId}-plugin.git</connection>
-    <developerConnection>scm:git:git@github.com:jenkinsci/${project.artifactId}-plugin.git</developerConnection>
-    <url>https://github.com/jenkinsci/${project.artifactId}-plugin</url>
-    <tag>HEAD</tag>
+    <connection>scm:git:git://github.com/${gitHubRepo}.git</connection>
+    <developerConnection>scm:git:git@github.com:${gitHubRepo}.git</developerConnection>
+    <url>https://github.com/${gitHubRepo}</url>
+    <tag>${scmTag}</tag>
   </scm>
 
   <properties>
-    <jenkins.version>2.222.4</jenkins.version>
+    <changelist>999999-SNAPSHOT</changelist>
+    <gitHubRepo>jenkinsci/junit-realtime-test-reporter-plugin</gitHubRepo>
+    <jenkins.version>2.303.3</jenkins.version>
     <java.level>8</java.level>
   </properties>
 
@@ -114,8 +116,8 @@
     <dependencies>
       <dependency>
         <groupId>io.jenkins.tools.bom</groupId>
-        <artifactId>bom-2.222.x</artifactId>
-        <version>26</version>
+        <artifactId>bom-2.303.x</artifactId>
+        <version>1055.v9637a690f734</version>
         <scope>import</scope>
         <type>pom</type>
       </dependency>
