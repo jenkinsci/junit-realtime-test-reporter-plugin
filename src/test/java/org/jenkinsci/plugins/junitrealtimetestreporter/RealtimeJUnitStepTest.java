@@ -23,6 +23,7 @@
  */
 package org.jenkinsci.plugins.junitrealtimetestreporter;
 
+import hudson.FilePath;
 import hudson.model.Result;
 import hudson.slaves.DumbSlave;
 import hudson.tasks.junit.TestResult;
@@ -48,7 +49,6 @@ import org.junit.ClassRule;
 import org.junit.Test;
 import static org.junit.Assert.*;
 import org.junit.Rule;
-import org.junit.runners.model.Statement;
 import org.jvnet.hudson.test.BuildWatcher;
 import org.jvnet.hudson.test.LoggerRule;
 import org.jvnet.hudson.test.RestartableJenkinsRule;
@@ -68,9 +68,7 @@ public class RealtimeJUnitStepTest {
 
     @Test
     public void smokes() {
-        rr.addStep(new Statement() {
-            @Override
-            public void evaluate() throws Throwable {
+        rr.then(r -> {
                 WorkflowJob p = rr.j.jenkins.createProject(WorkflowJob.class, "p");
                 p.setDefinition(new CpsFlowDefinition(
                     "node {\n" +
@@ -100,11 +98,8 @@ public class RealtimeJUnitStepTest {
                 assertEquals(0, rta.getTotalCount());
                 assertEquals(0, rta.getFailCount());
                 rr.j.assertBuildStatus(null, b2);
-            }
         });
-        rr.addStep(new Statement() {
-            @Override
-            public void evaluate() throws Throwable {
+        rr.then(r -> {
                 WorkflowRun b2 = rr.j.jenkins.getItemByFullName("p", WorkflowJob.class).getBuildByNumber(2);
                 AbstractRealtimeTestResultAction rta = b2.getAction(AbstractRealtimeTestResultAction.class);
                 assertNotNull(rta);
@@ -135,15 +130,12 @@ public class RealtimeJUnitStepTest {
                 assertEquals(4, a.getTotalCount());
                 assertEquals(1, a.getFailCount());
                 assertEquals(Collections.emptyList(), b2.getActions(AbstractRealtimeTestResultAction.class));
-            }
         });
     }
 
     @Test
     public void brokenConnection() {
-        rr.addStep(new Statement() {
-            @Override
-            public void evaluate() throws Throwable {
+        rr.then(r -> {
                 DumbSlave s = rr.j.createSlave("remote", null, null);
                 WorkflowJob p = rr.j.jenkins.createProject(WorkflowJob.class, "p");
                 p.setDefinition(new CpsFlowDefinition(
@@ -170,29 +162,25 @@ public class RealtimeJUnitStepTest {
                 assertNotNull(a);
                 assertEquals(4, a.getTotalCount());
                 assertEquals(1, a.getFailCount());
-            }
         });
     }
 
     @Test
     public void ui() {
-        rr.addStep(new Statement() {
-            @Override
-            public void evaluate() throws Throwable {
+        rr.then(r -> {
                 StepConfigTester t = new StepConfigTester(rr.j);
                 RealtimeJUnitStep s = new RealtimeJUnitStep("*.xml");
                 rr.j.assertEqualDataBoundBeans(s, t.configRoundTrip(s));
                 s.setKeepLongStdio(true);
                 rr.j.assertEqualDataBoundBeans(s, t.configRoundTrip(s));
-            }
+                s.setSkipMarkingBuildUnstable(true);
+                rr.j.assertEqualDataBoundBeans(s, t.configRoundTrip(s));
         });
     }
 
     @Test
     public void testResultDetails() {
-        rr.addStep(new Statement() {
-            @Override
-            public void evaluate() throws Throwable {
+        rr.then(r -> {
                 WorkflowJob p = rr.j.jenkins.createProject(WorkflowJob.class, "p");
                 p.setDefinition(new CpsFlowDefinition(
                     "node {\n" +
@@ -213,23 +201,47 @@ public class RealtimeJUnitStepTest {
                 assertEquals(4, a.getTotalCount());
                 assertEquals(1, a.getFailCount());
                 assertEquals(Collections.emptyList(), b1.getActions(AbstractRealtimeTestResultAction.class));
-                
+
                 FlowExecutionOwner owner = b1.asFlowExecutionOwner();
                 FlowExecution execution = owner.getOrNull();
                 DepthFirstScanner scanner = new DepthFirstScanner();
-                
+
                 FlowNode stage1Id = scanner.findFirstMatch(execution, new BlockNamePredicate("stage1"));
                 TestResult stage1Results = a.getResult().getResultForPipelineBlock(stage1Id.getId());
                 assertNotNull(stage1Results);
                 assertEquals(2, stage1Results.getTotalCount());
                 assertEquals(0, stage1Results.getFailCount());
-                
+
                 FlowNode stage2Id = scanner.findFirstMatch(execution, new BlockNamePredicate("stage2"));
                 TestResult stage2Results = a.getResult().getResultForPipelineBlock(stage2Id.getId());
                 assertNotNull(stage2Results);
                 assertEquals(2, stage2Results.getTotalCount());
                 assertEquals(1, stage2Results.getFailCount());
-            }
+        });
+    }
+
+    @Test
+    public void skipBuildUnstable() {
+        rr.then(r -> {
+            WorkflowJob j = r.jenkins.createProject(WorkflowJob.class, "currentBuildResultUnstable");
+            j.setDefinition(new CpsFlowDefinition("stage('first') {\n" +
+                    "  node {\n" +
+                    "    realtimeJUnit(testResults: 'b.xml', skipMarkingBuildUnstable: true) {\n" +
+                    "      writeFile text: '''<testsuite name='b'><testcase name='b1'/><testcase name='b2'><error>b2 failed</error></testcase></testsuite>''', file: 'b.xml'\n" +
+                    "    }\n" +
+                    "  }\n" +
+                    "}\n", true));
+            WorkflowRun run = r.waitForCompletion(j.scheduleBuild2(0).waitForStart());
+            r.assertBuildStatus(Result.SUCCESS, run);
+            TestResultAction a = run.getAction(TestResultAction.class);
+            assertNotNull(a);
+            DepthFirstScanner scanner = new DepthFirstScanner();
+            FlowExecutionOwner owner = run.asFlowExecutionOwner();
+            FlowExecution execution = owner.getOrNull();
+            TestResult stageResults = a.getResult().getResultForPipelineBlock(scanner.findFirstMatch(execution, new BlockNamePredicate("first")).getId());
+            assertNotNull(stageResults);
+            assertEquals(2, stageResults.getTotalCount());
+            assertEquals(1, stageResults.getFailCount());
         });
     }
 

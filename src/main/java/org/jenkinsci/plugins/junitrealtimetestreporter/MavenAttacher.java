@@ -88,13 +88,6 @@ public class MavenAttacher extends MavenReporter {
 
     @Extension(optional = true)
     public static class Descriptor extends MavenReporterDescriptor {
-
-        @Override
-        public String getDisplayName() {
-
-            return null;
-        }
-
         @Override
         public MavenReporter newAutoInstance(MavenModule module) {
 
