@@ -26,12 +26,22 @@ package org.jenkinsci.plugins.junitrealtimetestreporter;
 
 import hudson.AbortException;
 import hudson.FilePath;
+import hudson.Launcher;
+import hudson.model.TaskListener;
 import hudson.tasks.junit.JUnitParser;
 import hudson.tasks.junit.TestResult;
+import hudson.tasks.junit.pipeline.JUnitResultsStepExecution;
+import hudson.tasks.test.PipelineTestDetails;
 import java.io.IOException;
+import java.util.List;
+import java.util.Objects;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import org.jenkinsci.plugins.workflow.FilePathUtils;
+import org.jenkinsci.plugins.workflow.graph.FlowNode;
+import org.jenkinsci.plugins.workflow.steps.StepContext;
+
+import static java.util.Objects.requireNonNull;
 
 class PipelineRealtimeTestResultAction extends AbstractRealtimeTestResultAction {
 
@@ -42,13 +52,21 @@ class PipelineRealtimeTestResultAction extends AbstractRealtimeTestResultAction 
     private final String workspace;
     private final boolean keepLongStdio;
     private final String glob;
+    private final StepContext context;
 
-    PipelineRealtimeTestResultAction(String id, FilePath ws, boolean keepLongStdio, String glob) {
+    PipelineRealtimeTestResultAction(
+            String id,
+            FilePath ws,
+            boolean keepLongStdio,
+            String glob,
+            StepContext context
+    ) {
         this.id = id;
         node = FilePathUtils.getNodeName(ws);
         workspace = ws.getRemote();
         this.keepLongStdio = keepLongStdio;
         this.glob = glob;
+        this.context = context;
     }
 
     @Override
@@ -71,7 +89,19 @@ class PipelineRealtimeTestResultAction extends AbstractRealtimeTestResultAction 
         FilePath ws = FilePathUtils.find(node, workspace);
         if (ws != null && ws.isDirectory()) {
             LOGGER.log(Level.FINE, "parsing {0} in {1} on node {2} for {3}", new Object[] {glob, workspace, node, run});
-            return new JUnitParser(keepLongStdio, true).parseResult(glob, run, ws, null, null);
+
+            FlowNode node = context.get(FlowNode.class);
+            List<FlowNode> enclosingBlocks = JUnitResultsStepExecution
+                    .getEnclosingStagesAndParallels(requireNonNull(node));
+
+            PipelineTestDetails pipelineTestDetails = new PipelineTestDetails();
+            pipelineTestDetails.setNodeId(id);
+            pipelineTestDetails.setEnclosingBlocks(JUnitResultsStepExecution.getEnclosingBlockIds(enclosingBlocks));
+            pipelineTestDetails.setEnclosingBlockNames(JUnitResultsStepExecution.getEnclosingBlockNames(enclosingBlocks));
+
+            return new JUnitParser(keepLongStdio, true)
+                    .parseResult(glob, run, pipelineTestDetails, ws,
+                            context.get(Launcher.class), context.get(TaskListener.class));
         } else {
             throw new AbortException("skipping parse in nonexistent workspace for " +  run);
         }
