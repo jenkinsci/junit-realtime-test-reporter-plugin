@@ -10,7 +10,7 @@ Publishes test results while tests run, rather than waiting for completion like 
 
 ```groovy
 realtimeJUnit('**/target/surefire-reports/TEST-*.xml') {
-    sh "mvn -Dmaven.test.failure.ignore=true clean package"
+    sh 'mvn -Dmaven.test.failure.ignore=true clean verify'
 }
 ```
 
