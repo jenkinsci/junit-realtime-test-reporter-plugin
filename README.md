@@ -9,8 +9,8 @@ Publishes test results while tests run, rather than waiting for completion like 
 ### Pipeline
 
 ```groovy
-realtimeJUnit('target/test-results/*.xml') {
-    sh 'mvn verify'
+realtimeJUnit('**/target/surefire-reports/TEST-*.xml') {
+    sh "mvn -Dmaven.test.failure.ignore=true clean package"
 }
 ```
 

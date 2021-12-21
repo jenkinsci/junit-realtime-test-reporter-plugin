@@ -43,6 +43,7 @@ import hudson.tasks.test.PipelineTestDetails;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -60,6 +61,8 @@ import org.jenkinsci.plugins.workflow.steps.StepExecution;
 import org.jenkinsci.plugins.workflow.support.pickles.XStreamPickle;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.DataBoundSetter;
+
+import static java.util.Objects.requireNonNull;
 
 public class RealtimeJUnitStep extends Step {
 
@@ -151,11 +154,20 @@ public class RealtimeJUnitStep extends Step {
 
         @Override
         public boolean start() throws Exception {
-            Run<?, ?> r = getContext().get(Run.class);
-            String id = getContext().get(FlowNode.class).getId();
-            r.addAction(new PipelineRealtimeTestResultAction(id, getContext().get(FilePath.class), archiver.isKeepLongStdio(), archiver.getTestResults()));
+            StepContext context = getContext();
+            Run<?, ?> r = context.get(Run.class);
+            FlowNode flowNode = context.get(FlowNode.class);
+            String id = requireNonNull(flowNode).getId();
+            requireNonNull(r).addAction(new PipelineRealtimeTestResultAction(
+                            id,
+                            context.get(FilePath.class),
+                            archiver.isKeepLongStdio(),
+                            archiver.getTestResults(),
+                            context
+                    )
+            );
             AbstractRealtimeTestResultAction.saveBuild(r);
-            getContext().newBodyInvoker().withCallback(new Callback(id, archiver)).start();
+            context.newBodyInvoker().withCallback(new Callback(id, archiver)).start();
             return false;
         }
 
