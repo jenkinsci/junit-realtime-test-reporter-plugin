@@ -41,6 +41,7 @@ import hudson.tasks.junit.TestResultSummary;
 import hudson.tasks.junit.pipeline.JUnitResultsStepExecution;
 import hudson.tasks.test.PipelineTestDetails;
 
+import java.io.IOException;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
@@ -154,7 +155,12 @@ public class RealtimeJUnitStep extends Step {
         }
 
         @Override
-        public boolean start() throws Exception {
+        public boolean start() {
+            run(this::doStart);
+            return false;
+        }
+
+        private void doStart() throws IOException, InterruptedException {
             StepContext context = getContext();
             Run<?, ?> r = context.get(Run.class);
             FlowNode flowNode = context.get(FlowNode.class);
@@ -169,7 +175,6 @@ public class RealtimeJUnitStep extends Step {
             );
             AbstractRealtimeTestResultAction.saveBuild(r);
             context.newBodyInvoker().withCallback(new Callback(id, archiver)).start();
-            return false;
         }
 
         private static final long serialVersionUID = 1;
