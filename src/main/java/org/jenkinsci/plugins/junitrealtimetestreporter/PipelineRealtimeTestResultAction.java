@@ -24,9 +24,9 @@
 
 package org.jenkinsci.plugins.junitrealtimetestreporter;
 
+import edu.umd.cs.findbugs.annotations.CheckForNull;
 import hudson.AbortException;
 import hudson.FilePath;
-import hudson.Launcher;
 import hudson.model.TaskListener;
 import hudson.tasks.junit.JUnitParser;
 import hudson.tasks.junit.TestResult;
@@ -34,10 +34,11 @@ import hudson.tasks.junit.pipeline.JUnitResultsStepExecution;
 import hudson.tasks.test.PipelineTestDetails;
 import java.io.IOException;
 import java.util.List;
-import java.util.Objects;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import org.jenkinsci.plugins.workflow.FilePathUtils;
+import org.jenkinsci.plugins.workflow.flow.FlowExecution;
+import org.jenkinsci.plugins.workflow.flow.FlowExecutionOwner;
 import org.jenkinsci.plugins.workflow.graph.FlowNode;
 import org.jenkinsci.plugins.workflow.steps.StepContext;
 
@@ -52,7 +53,8 @@ class PipelineRealtimeTestResultAction extends AbstractRealtimeTestResultAction 
     private final String workspace;
     private final boolean keepLongStdio;
     private final String glob;
-    private final StepContext context;
+    @CheckForNull
+    private transient final StepContext context;
 
     PipelineRealtimeTestResultAction(
             String id,
@@ -90,18 +92,40 @@ class PipelineRealtimeTestResultAction extends AbstractRealtimeTestResultAction 
         if (ws != null && ws.isDirectory()) {
             LOGGER.log(Level.FINE, "parsing {0} in {1} on node {2} for {3}", new Object[] {glob, workspace, node, run});
 
-            FlowNode node = context.get(FlowNode.class);
-            List<FlowNode> enclosingBlocks = JUnitResultsStepExecution
-                    .getEnclosingStagesAndParallels(requireNonNull(node));
+            FlowNode node = null;
+            TaskListener listener = TaskListener.NULL;
+            // lots of boilerplate code to get access to the flow node and listener but without saving
+            // the StepContext via xstream in case of restarts, we default to using step context if it's available though
+            if (context != null) {
+                node = context.get(FlowNode.class);
+                listener = context.get(TaskListener.class);
+            } else {
+                if (this.run instanceof FlowExecutionOwner.Executable) {
+                    FlowExecutionOwner.Executable executable = (FlowExecutionOwner.Executable) this.run;
+                    FlowExecutionOwner flowOwner = executable.asFlowExecutionOwner();
+                    if (flowOwner != null) {
+                        FlowExecution flowExecution = flowOwner.getOrNull();
+                        if (flowExecution != null) {
+                            node = flowExecution.getNode(id);
+                        }
+                        listener = flowOwner.getListener();
+                    }
+                }
+            }
 
-            PipelineTestDetails pipelineTestDetails = new PipelineTestDetails();
-            pipelineTestDetails.setNodeId(id);
-            pipelineTestDetails.setEnclosingBlocks(JUnitResultsStepExecution.getEnclosingBlockIds(enclosingBlocks));
-            pipelineTestDetails.setEnclosingBlockNames(JUnitResultsStepExecution.getEnclosingBlockNames(enclosingBlocks));
+            PipelineTestDetails pipelineTestDetails = null;
+            if (node != null) {
+                List<FlowNode> enclosingBlocks = JUnitResultsStepExecution
+                        .getEnclosingStagesAndParallels(requireNonNull(node));
+
+                pipelineTestDetails = new PipelineTestDetails();
+                pipelineTestDetails.setNodeId(id);
+                pipelineTestDetails.setEnclosingBlocks(JUnitResultsStepExecution.getEnclosingBlockIds(enclosingBlocks));
+                pipelineTestDetails.setEnclosingBlockNames(JUnitResultsStepExecution.getEnclosingBlockNames(enclosingBlocks));
+            }
 
             return new JUnitParser(keepLongStdio, true)
-                    .parseResult(glob, run, pipelineTestDetails, ws,
-                            context.get(Launcher.class), context.get(TaskListener.class));
+                    .parseResult(glob, this.run, pipelineTestDetails, ws, null, listener);
         } else {
             throw new AbortException("skipping parse in nonexistent workspace for " +  run);
         }
