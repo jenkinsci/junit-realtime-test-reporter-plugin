@@ -54,6 +54,7 @@ import org.jenkinsci.plugins.workflow.graph.FlowNode;
 import org.jenkinsci.plugins.workflow.pickles.Pickle;
 import org.jenkinsci.plugins.workflow.pickles.PickleFactory;
 import org.jenkinsci.plugins.workflow.steps.BodyExecutionCallback;
+import org.jenkinsci.plugins.workflow.steps.GeneralNonBlockingStepExecution;
 import org.jenkinsci.plugins.workflow.steps.Step;
 import org.jenkinsci.plugins.workflow.steps.StepContext;
 import org.jenkinsci.plugins.workflow.steps.StepDescriptor;
@@ -143,7 +144,7 @@ public class RealtimeJUnitStep extends Step {
     }
 
     @SuppressFBWarnings("SE_BAD_FIELD") // FIXME
-    static class Execution extends StepExecution {
+    static class Execution extends GeneralNonBlockingStepExecution {
 
         private final JUnitResultArchiver archiver;
 
@@ -175,7 +176,7 @@ public class RealtimeJUnitStep extends Step {
 
     }
 
-    @SuppressFBWarnings("SE_BAD_FIELD") // FIXME
+    @SuppressFBWarnings(value = "SE_BAD_FIELD", justification = "Handled by 'Pickler' below")
     static class Callback extends BodyExecutionCallback {
 
         private final String id;
@@ -237,7 +238,6 @@ public class RealtimeJUnitStep extends Step {
                 pipelineTestDetails.setEnclosingBlocks(JUnitResultsStepExecution.getEnclosingBlockIds(enclosingBlocks));
                 pipelineTestDetails.setEnclosingBlockNames(JUnitResultsStepExecution.getEnclosingBlockNames(enclosingBlocks));
 
-                // TODO might block CPS VM thread. Not trivial to solve: JENKINS-43276
                 TestResultSummary summary = JUnitResultArchiver.parseAndSummarize(archiver, pipelineTestDetails, r, workspace, launcher, listener);
 
                 if (summary.getFailCount() > 0) {
