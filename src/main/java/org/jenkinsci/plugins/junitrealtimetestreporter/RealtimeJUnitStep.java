@@ -190,74 +190,76 @@ public class RealtimeJUnitStep extends Step {
             // TODO would be helpful to have a TailCall.finished overload taking success parameter
             @Override
             public void onSuccess(StepContext context, Object result) {
-                try {
-                    finished(context, true);
-                } catch (Exception x) {
-                    context.onFailure(x);
-                    return;
-                }
-                context.onSuccess(result);
+                run(() -> {
+                    try {
+                        finished(context, true);
+                    } catch (Exception x) {
+                        context.onFailure(x);
+                        return;
+                    }
+                    context.onSuccess(result);
+                });
             }
 
             @Override
             public void onFailure(StepContext context, Throwable t) {
-                try {
-                    finished(context, false);
-                } catch (Exception x) {
-                    t.addSuppressed(x);
-                }
-                context.onFailure(t);
+                run(() -> {
+                    try {
+                        finished(context, false);
+                    } catch (Exception x) {
+                        t.addSuppressed(x);
+                    }
+                    context.onFailure(t);
+                });
             }
 
             private void finished(StepContext context, boolean success) throws Exception {
-                run(() -> {
-                    Run<?, ?> r = context.get(Run.class);
-                    TestResult provisional = null;
-                    for (PipelineRealtimeTestResultAction a : r.getActions(PipelineRealtimeTestResultAction.class)) {
-                        if (a.id.equals(id)) {
-                            provisional = a.getResult();
-                            r.removeAction(a);
-                            LOGGER.log(Level.FINE, "clearing {0} from {1}", new Object[]{id, r});
-                            AbstractRealtimeTestResultAction.saveBuild(r);
-                            break;
-                        }
+                Run<?, ?> r = context.get(Run.class);
+                TestResult provisional = null;
+                for (PipelineRealtimeTestResultAction a : r.getActions(PipelineRealtimeTestResultAction.class)) {
+                    if (a.id.equals(id)) {
+                        provisional = a.getResult();
+                        r.removeAction(a);
+                        LOGGER.log(Level.FINE, "clearing {0} from {1}", new Object[]{id, r});
+                        AbstractRealtimeTestResultAction.saveBuild(r);
+                        break;
                     }
-                    if (!success) {
-                        archiver.setAllowEmptyResults(true);
-                    }
-                    TaskListener listener = context.get(TaskListener.class);
-                    try {
-                        FilePath workspace = context.get(FilePath.class);
-                        workspace.mkdirs();
-                        Launcher launcher = context.get(Launcher.class);
-                        FlowNode node = context.get(FlowNode.class);
+                }
+                if (!success) {
+                    archiver.setAllowEmptyResults(true);
+                }
+                TaskListener listener = context.get(TaskListener.class);
+                try {
+                    FilePath workspace = context.get(FilePath.class);
+                    workspace.mkdirs();
+                    Launcher launcher = context.get(Launcher.class);
+                    FlowNode node = context.get(FlowNode.class);
 
-                        List<FlowNode> enclosingBlocks = JUnitResultsStepExecution.getEnclosingStagesAndParallels(node);
+                    List<FlowNode> enclosingBlocks = JUnitResultsStepExecution.getEnclosingStagesAndParallels(node);
 
-                        PipelineTestDetails pipelineTestDetails = new PipelineTestDetails();
-                        pipelineTestDetails.setNodeId(id);
-                        pipelineTestDetails.setEnclosingBlocks(JUnitResultsStepExecution.getEnclosingBlockIds(enclosingBlocks));
-                        pipelineTestDetails.setEnclosingBlockNames(JUnitResultsStepExecution.getEnclosingBlockNames(enclosingBlocks));
+                    PipelineTestDetails pipelineTestDetails = new PipelineTestDetails();
+                    pipelineTestDetails.setNodeId(id);
+                    pipelineTestDetails.setEnclosingBlocks(JUnitResultsStepExecution.getEnclosingBlockIds(enclosingBlocks));
+                    pipelineTestDetails.setEnclosingBlockNames(JUnitResultsStepExecution.getEnclosingBlockNames(enclosingBlocks));
 
-                        TestResultSummary summary = JUnitResultArchiver.parseAndSummarize(archiver, pipelineTestDetails, r, workspace, launcher, listener);
+                    TestResultSummary summary = JUnitResultArchiver.parseAndSummarize(archiver, pipelineTestDetails, r, workspace, launcher, listener);
 
-                        if (summary.getFailCount() > 0) {
-                            int testFailures = summary.getFailCount();
-                            if (testFailures > 0) {
-                                node.addOrReplaceAction(new WarningAction(Result.UNSTABLE).withMessage(testFailures + " tests failed"));
-                                if (!archiver.isSkipMarkingBuildUnstable()) {
-                                    r.setResult(Result.UNSTABLE);
-                                }
+                    if (summary.getFailCount() > 0) {
+                        int testFailures = summary.getFailCount();
+                        if (testFailures > 0) {
+                            node.addOrReplaceAction(new WarningAction(Result.UNSTABLE).withMessage(testFailures + " tests failed"));
+                            if (!archiver.isSkipMarkingBuildUnstable()) {
+                                r.setResult(Result.UNSTABLE);
                             }
                         }
-                    } catch (Exception x) {
-                        if (provisional != null) {
-                            listener.getLogger().println("Final archiving failed; recording " + provisional.getTotalCount() + " provisional test results.");
-                            r.addAction(new TestResultAction(r, provisional, listener));
-                        }
-                        throw x;
                     }
-                });
+                } catch (Exception x) {
+                    if (provisional != null) {
+                        listener.getLogger().println("Final archiving failed; recording " + provisional.getTotalCount() + " provisional test results.");
+                        r.addAction(new TestResultAction(r, provisional, listener));
+                    }
+                    throw x;
+                }
             }
 
             private static final long serialVersionUID = 1;
