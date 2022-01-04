@@ -25,6 +25,7 @@ package org.jenkinsci.plugins.junitrealtimetestreporter;
 
 import hudson.AbortException;
 import hudson.Main;
+import hudson.model.Result;
 import hudson.model.Run;
 import hudson.tasks.junit.TestResult;
 import hudson.tasks.test.AbstractTestResultAction;
@@ -36,16 +37,22 @@ import java.util.logging.Logger;
 import org.kohsuke.stapler.HttpRedirect;
 import org.kohsuke.stapler.StaplerProxy;
 
-abstract class AbstractRealtimeTestResultAction extends AbstractTestResultAction<AbstractRealtimeTestResultAction> implements StaplerProxy {
+import com.google.common.collect.ImmutableSet;
+
+public abstract class AbstractRealtimeTestResultAction extends AbstractTestResultAction<AbstractRealtimeTestResultAction> implements StaplerProxy {
 
     private static final Logger LOGGER = Logger.getLogger(AbstractRealtimeTestResultAction.class.getName());
 
+    protected TestResult previousResult;
     protected TestResult result;
+    protected TestProgress progress;
     private transient long updated;
 
     protected AbstractRealtimeTestResultAction() {}
 
     protected abstract TestResult parse() throws IOException, InterruptedException;
+
+    protected abstract TestResult findPreviousTestResult() throws IOException, InterruptedException;
 
     @Override
     public TestResult getResult() {
@@ -58,10 +65,17 @@ abstract class AbstractRealtimeTestResultAction extends AbstractTestResultAction
             return result;
         }
         try {
+            if (updated == 0 && previousResult == null) {
+                previousResult = findPreviousTestResult();
+            }
+
             final long started = System.currentTimeMillis(); // TODO use nanoTime
             // TODO this can block on Remoting and hang the UI; need to refresh results asynchronously
             result = parse();
             result.setParentAction(this);
+            if (previousResult != null) {
+                progress = new TestProgress(previousResult, result);
+            }
             if (LOGGER.isLoggable(Level.FINE)) {
                 LOGGER.log(Level.FINE, "Parsing of {0} test results took {1}ms", new Object[] {result.getTotalCount(), System.currentTimeMillis() - started});
             }
@@ -125,6 +139,10 @@ abstract class AbstractRealtimeTestResultAction extends AbstractTestResultAction
         return new TestResult();
     }
 
+    public TestProgress getTestProgress() {
+        return progress;
+    }
+
     static void saveBuild(Run<?, ?> build) {
         try {
             build.save();
@@ -138,6 +156,26 @@ abstract class AbstractRealtimeTestResultAction extends AbstractTestResultAction
             LOGGER.log(Level.FINE, "Detaching RealtimeTestResultAction from {0}", build);
             saveBuild(build);
         }
+    }
+
+    public static final int NUMBER_OF_BUILDS_TO_SEARCH = 20;
+    public static final ImmutableSet<Result> RESULTS_OF_BUILDS_TO_CONSIDER = ImmutableSet.of(Result.SUCCESS, Result.UNSTABLE);
+
+    protected static TestResult findPreviousTestResult(Run<?, ?> b) {
+        for (int i = 0; i < NUMBER_OF_BUILDS_TO_SEARCH; i++) {// limit the search to a small number to avoid loading too much
+            b = b.getPreviousBuild();
+            if (b == null) break;
+            if(!RESULTS_OF_BUILDS_TO_CONSIDER.contains(b.getResult())) continue;
+
+            AbstractTestResultAction tra = b.getAction(AbstractTestResultAction.class);
+            if (tra == null) continue;
+
+            Object o = tra.getResult();
+            if (o instanceof TestResult) {
+                return (TestResult) o;
+            }
+        }
+        return null;    // couldn't find it
     }
 
 }

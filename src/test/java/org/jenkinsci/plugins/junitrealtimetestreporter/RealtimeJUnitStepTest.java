@@ -23,7 +23,6 @@
  */
 package org.jenkinsci.plugins.junitrealtimetestreporter;
 
-import hudson.FilePath;
 import hudson.model.Result;
 import hudson.slaves.DumbSlave;
 import hudson.tasks.junit.TestResult;
@@ -31,11 +30,7 @@ import hudson.tasks.junit.TestResultAction;
 import java.util.Collections;
 import java.util.logging.Level;
 
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
-
-import org.jenkinsci.plugins.workflow.actions.LabelAction;
-import org.jenkinsci.plugins.workflow.actions.ThreadNameAction;
+import org.jenkinsci.plugins.junitrealtimetestreporter.PipelineRealtimeTestResultAction.BlockNamePredicate;
 import org.jenkinsci.plugins.workflow.cps.CpsFlowDefinition;
 import org.jenkinsci.plugins.workflow.flow.FlowExecution;
 import org.jenkinsci.plugins.workflow.flow.FlowExecutionOwner;
@@ -52,8 +47,6 @@ import org.junit.Rule;
 import org.jvnet.hudson.test.BuildWatcher;
 import org.jvnet.hudson.test.LoggerRule;
 import org.jvnet.hudson.test.RestartableJenkinsRule;
-
-import com.google.common.base.Predicate;
 
 public class RealtimeJUnitStepTest {
 
@@ -245,23 +238,74 @@ public class RealtimeJUnitStepTest {
         });
     }
 
-    private static class BlockNamePredicate implements Predicate<FlowNode> {
-        private final String blockName;
-        public BlockNamePredicate(@Nonnull String blockName) {
-            this.blockName = blockName;
-        }
-        @Override
-        public boolean apply(@Nullable FlowNode input) {
-            if (input != null) {
-                LabelAction labelAction = input.getPersistentAction(LabelAction.class);
-                if (labelAction != null && labelAction instanceof ThreadNameAction) {
-                	return blockName.equals(((ThreadNameAction) labelAction).getThreadName());
-                }
-                return labelAction != null && blockName.equals(labelAction.getDisplayName());
-            }
-            return false;
-        }
+    @Test
+    public void testProgress() {
+        rr.then(r -> {
+            WorkflowJob p = r.jenkins.createProject(WorkflowJob.class, "p");
+            p.setDefinition(new CpsFlowDefinition(
+                "node {\n" +
+                "  realtimeJUnit('*.xml') {\n" +
+                "    semaphore 'pre'\n" +
+                "    writeFile text: '''<testsuite name='a' time='4'><testcase name='a1' time='1'/><testcase name='a2' time='3'/></testsuite>''', file: 'a.xml'\n" +
+                "    semaphore 'mid'\n" +
+                "    writeFile text: '''<testsuite name='b' time='6'><testcase name='b1' time='2'/><testcase name='b2' time='4'><error>b2 failed</error></testcase></testsuite>''', file: 'b.xml'\n" +
+                "    semaphore 'post'\n" +
+                "  }\n" +
+                "  deleteDir()\n" +
+                "}; semaphore 'final'", true));
+            SemaphoreStep.success("pre/1", null);
+            SemaphoreStep.success("mid/1", null);
+            SemaphoreStep.success("post/1", null);
+            SemaphoreStep.success("final/1", null);
+            p.scheduleBuild2(0).get();
+    
+            WorkflowRun b2 = p.scheduleBuild2(0).waitForStart();
+    
+            SemaphoreStep.waitForStart("pre/2", b2);
+            AbstractRealtimeTestResultAction rta = b2.getAction(AbstractRealtimeTestResultAction.class);
+            assertNotNull(rta);
+            TestResult result = rta.getResult();
+            assertNull(result);
+            TestProgress progress = rta.getTestProgress();
+            assertNull(progress);
+            SemaphoreStep.success("pre/2", null);
+    
+            SemaphoreStep.waitForStart("mid/2", b2);
+            result = rta.getResult();
+            assertNotNull(result);
+            progress = rta.getTestProgress();
+            assertNotNull(progress);
+            assertEquals(4, progress.getExpectedTests());
+            assertEquals(2, progress.getCompletedTests());
+            assertEquals(50, progress.getCompletedTestsPercentage());
+            assertEquals(50, progress.getTestsLeftPercentage());
+            assertEquals(10, progress.getExpectedTime(), 0);
+            assertEquals(4, progress.getCompletedTime(), 0);
+            assertEquals(40, progress.getCompletedTimePercentage());
+            assertEquals(60, progress.getTimeLeftPercentage());
+            assertEquals("6 sec", progress.getEstimatedRemainingTime());
+            SemaphoreStep.success("mid/2", null);
+    
+            SemaphoreStep.waitForStart("post/2", b2);
+            result = rta.getResult();
+            assertNotNull(result);
+            progress = rta.getTestProgress();
+            assertNotNull(progress);
+            assertEquals(4, progress.getExpectedTests());
+            assertEquals(4, progress.getCompletedTests());
+            assertEquals(100, progress.getCompletedTestsPercentage());
+            assertEquals(0, progress.getTestsLeftPercentage());
+            assertEquals(10, progress.getExpectedTime(), 0);
+            assertEquals(10, progress.getCompletedTime(), 0);
+            assertEquals(100, progress.getCompletedTimePercentage());
+            assertEquals(0, progress.getTimeLeftPercentage());
+            assertEquals("0 sec", progress.getEstimatedRemainingTime());
+            SemaphoreStep.success("post/2", null);
+    
+            SemaphoreStep.success("final/2", null);
+        });
     }
+
     // TODO test distinct parallel / repeated archiving
 
 }
