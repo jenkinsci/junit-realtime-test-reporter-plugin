@@ -41,9 +41,9 @@ import hudson.tasks.junit.TestResultSummary;
 import hudson.tasks.junit.pipeline.JUnitResultsStepExecution;
 import hudson.tasks.test.PipelineTestDetails;
 
+import java.io.IOException;
 import java.util.Collections;
 import java.util.List;
-import java.util.Objects;
 import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -54,6 +54,7 @@ import org.jenkinsci.plugins.workflow.graph.FlowNode;
 import org.jenkinsci.plugins.workflow.pickles.Pickle;
 import org.jenkinsci.plugins.workflow.pickles.PickleFactory;
 import org.jenkinsci.plugins.workflow.steps.BodyExecutionCallback;
+import org.jenkinsci.plugins.workflow.steps.GeneralNonBlockingStepExecution;
 import org.jenkinsci.plugins.workflow.steps.Step;
 import org.jenkinsci.plugins.workflow.steps.StepContext;
 import org.jenkinsci.plugins.workflow.steps.StepDescriptor;
@@ -139,10 +140,87 @@ public class RealtimeJUnitStep extends Step {
         delegate.setKeepLongStdio(keepLongStdio);
         delegate.setTestDataPublishers(getTestDataPublishers());
         delegate.setSkipMarkingBuildUnstable(isSkipMarkingBuildUnstable());
-        return new Execution(context, delegate);
+        return new Execution2(context, delegate);
     }
 
     @SuppressFBWarnings("SE_BAD_FIELD") // FIXME
+    static class Execution2 extends GeneralNonBlockingStepExecution {
+        private final JUnitResultArchiver archiver;
+
+        Execution2(StepContext context, JUnitResultArchiver archiver) {
+            super(context);
+            this.archiver = archiver;
+        }
+
+        @Override
+        public boolean start() {
+            run(this::doStart);
+            return false;
+        }
+
+        private void doStart() throws IOException, InterruptedException {
+            StepContext context = getContext();
+            Run<?, ?> r = context.get(Run.class);
+            FlowNode flowNode = context.get(FlowNode.class);
+            String id = requireNonNull(flowNode).getId();
+            requireNonNull(r).addAction(new PipelineRealtimeTestResultAction(
+                            id,
+                            context.get(FilePath.class),
+                            archiver.isKeepLongStdio(),
+                            archiver.getTestResults(),
+                            context
+                    )
+            );
+            AbstractRealtimeTestResultAction.saveBuild(r);
+            context.newBodyInvoker().withCallback(new Callback2(id, archiver)).start();
+        }
+
+        @SuppressFBWarnings(value = "SE_BAD_FIELD", justification = "Handled by 'Pickler' below")
+        private final class Callback2 extends BodyExecutionCallback {
+
+            private final String id;
+            private final JUnitResultArchiver archiver;
+
+            Callback2(String id, JUnitResultArchiver archiver) {
+                this.id = id;
+                this.archiver = archiver;
+            }
+
+            // TODO would be helpful to have a TailCall.finished overload taking success parameter
+            @Override
+            public void onSuccess(StepContext context, Object result) {
+                run(() -> {
+                    try {
+                        finished(id, archiver, context, true);
+                    } catch (Exception x) {
+                        context.onFailure(x);
+                        return;
+                    }
+                    context.onSuccess(result);
+                });
+            }
+
+            @Override
+            public void onFailure(StepContext context, Throwable t) {
+                run(() -> {
+                    try {
+                        finished(id, archiver, context, false);
+                    } catch (Exception x) {
+                        t.addSuppressed(x);
+                    }
+                    context.onFailure(t);
+                });
+            }
+
+            private static final long serialVersionUID = 1;
+
+        }
+
+    }
+
+    // Retained for binary compat across upgrades, can be removed at some point later
+    @SuppressFBWarnings("SE_BAD_FIELD") // FIXME
+    @Deprecated
     static class Execution extends StepExecution {
 
         private final JUnitResultArchiver archiver;
@@ -153,7 +231,15 @@ public class RealtimeJUnitStep extends Step {
         }
 
         @Override
-        public boolean start() throws Exception {
+        public boolean start() throws IOException, InterruptedException {
+            doStart();
+            return false;
+        }
+
+        // not much point extracting the method, can't use the same Callback unfortunately due to needing to be an enclosing class
+        // to access #run()
+        @SuppressWarnings("DuplicatedCode")
+        void doStart() throws IOException, InterruptedException {
             StepContext context = getContext();
             Run<?, ?> r = context.get(Run.class);
             FlowNode flowNode = context.get(FlowNode.class);
@@ -168,15 +254,65 @@ public class RealtimeJUnitStep extends Step {
             );
             AbstractRealtimeTestResultAction.saveBuild(r);
             context.newBodyInvoker().withCallback(new Callback(id, archiver)).start();
-            return false;
         }
 
         private static final long serialVersionUID = 1;
 
     }
 
-    @SuppressFBWarnings("SE_BAD_FIELD") // FIXME
-    static class Callback extends BodyExecutionCallback {
+    private static void finished(String id, JUnitResultArchiver archiver, StepContext context, boolean success) throws Exception {
+        Run<?, ?> r = context.get(Run.class);
+        TestResult provisional = null;
+        for (PipelineRealtimeTestResultAction a : r.getActions(PipelineRealtimeTestResultAction.class)) {
+            if (a.id.equals(id)) {
+                provisional = a.getResult();
+                r.removeAction(a);
+                LOGGER.log(Level.FINE, "clearing {0} from {1}", new Object[]{id, r});
+                AbstractRealtimeTestResultAction.saveBuild(r);
+                break;
+            }
+        }
+        if (!success) {
+            archiver.setAllowEmptyResults(true);
+        }
+        TaskListener listener = context.get(TaskListener.class);
+        try {
+            FilePath workspace = context.get(FilePath.class);
+            workspace.mkdirs();
+            Launcher launcher = context.get(Launcher.class);
+            FlowNode node = context.get(FlowNode.class);
+
+            List<FlowNode> enclosingBlocks = JUnitResultsStepExecution.getEnclosingStagesAndParallels(node);
+
+            PipelineTestDetails pipelineTestDetails = new PipelineTestDetails();
+            pipelineTestDetails.setNodeId(id);
+            pipelineTestDetails.setEnclosingBlocks(JUnitResultsStepExecution.getEnclosingBlockIds(enclosingBlocks));
+            pipelineTestDetails.setEnclosingBlockNames(JUnitResultsStepExecution.getEnclosingBlockNames(enclosingBlocks));
+
+            TestResultSummary summary = JUnitResultArchiver.parseAndSummarize(archiver, pipelineTestDetails, r, workspace, launcher, listener);
+
+            if (summary.getFailCount() > 0) {
+                int testFailures = summary.getFailCount();
+                if (testFailures > 0) {
+                    node.addOrReplaceAction(new WarningAction(Result.UNSTABLE).withMessage(testFailures + " tests failed"));
+                    if (!archiver.isSkipMarkingBuildUnstable()) {
+                        r.setResult(Result.UNSTABLE);
+                    }
+                }
+            }
+        } catch (Exception x) {
+            if (provisional != null) {
+                listener.getLogger().println("Final archiving failed; recording " + provisional.getTotalCount() + " provisional test results.");
+                r.addAction(new TestResultAction(r, provisional, listener));
+            }
+            throw x;
+        }
+    }
+
+    // Retained for binary compatibility during upgrade can be removed after some time
+    @SuppressFBWarnings(value = "SE_BAD_FIELD", justification = "Handled by 'Pickler' below")
+    @Deprecated
+    private static final class Callback extends BodyExecutionCallback {
 
         private final String id;
         private final JUnitResultArchiver archiver;
@@ -186,11 +322,10 @@ public class RealtimeJUnitStep extends Step {
             this.archiver = archiver;
         }
 
-        // TODO would be helpful to have a TailCall.finished overload taking success parameter
         @Override
         public void onSuccess(StepContext context, Object result) {
             try {
-                finished(context, true);
+                finished(id, archiver, context, true);
             } catch (Exception x) {
                 context.onFailure(x);
                 return;
@@ -201,65 +336,13 @@ public class RealtimeJUnitStep extends Step {
         @Override
         public void onFailure(StepContext context, Throwable t) {
             try {
-                finished(context, false);
+                finished(id, archiver, context, false);
             } catch (Exception x) {
-                t.addSuppressed(x);
+                context.onFailure(x);
+                return;
             }
             context.onFailure(t);
         }
-
-        private void finished(StepContext context, boolean success) throws Exception {
-            Run<?, ?> r = context.get(Run.class);
-            TestResult provisional = null;
-            for (PipelineRealtimeTestResultAction a : r.getActions(PipelineRealtimeTestResultAction.class)) {
-                if (a.id.equals(id)) {
-                    provisional = a.getResult();
-                    r.removeAction(a);
-                    LOGGER.log(Level.FINE, "clearing {0} from {1}", new Object[] {id, r});
-                    AbstractRealtimeTestResultAction.saveBuild(r);
-                    break;
-                }
-            }
-            if (!success) {
-                archiver.setAllowEmptyResults(true);
-            }
-            TaskListener listener = context.get(TaskListener.class);
-            try {
-                FilePath workspace = context.get(FilePath.class);
-                workspace.mkdirs();
-                Launcher launcher = context.get(Launcher.class);
-                FlowNode node = context.get(FlowNode.class);
-
-                List<FlowNode> enclosingBlocks = JUnitResultsStepExecution.getEnclosingStagesAndParallels(node);
-
-                PipelineTestDetails pipelineTestDetails = new PipelineTestDetails();
-                pipelineTestDetails.setNodeId(id);
-                pipelineTestDetails.setEnclosingBlocks(JUnitResultsStepExecution.getEnclosingBlockIds(enclosingBlocks));
-                pipelineTestDetails.setEnclosingBlockNames(JUnitResultsStepExecution.getEnclosingBlockNames(enclosingBlocks));
-
-                // TODO might block CPS VM thread. Not trivial to solve: JENKINS-43276
-                TestResultSummary summary = JUnitResultArchiver.parseAndSummarize(archiver, pipelineTestDetails, r, workspace, launcher, listener);
-
-                if (summary.getFailCount() > 0) {
-                    int testFailures = summary.getFailCount();
-                    if (testFailures > 0) {
-                        node.addOrReplaceAction(new WarningAction(Result.UNSTABLE).withMessage(testFailures + " tests failed"));
-                        if (!archiver.isSkipMarkingBuildUnstable()) {
-                            r.setResult(Result.UNSTABLE);
-                        }
-                    }
-                }
-            } catch (Exception x) {
-                if (provisional != null) {
-                    listener.getLogger().println("Final archiving failed; recording " + provisional.getTotalCount() + " provisional test results.");
-                    r.addAction(new TestResultAction(r, provisional, listener));
-                }
-                throw x;
-            }
-        }
-
-        private static final long serialVersionUID = 1;
-
     }
 
     @Extension
