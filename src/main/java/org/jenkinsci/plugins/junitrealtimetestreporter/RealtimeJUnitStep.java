@@ -311,6 +311,7 @@ public class RealtimeJUnitStep extends Step {
 
     // Retained for binary compatibility during upgrade can be removed after some time
     @SuppressFBWarnings(value = "SE_BAD_FIELD", justification = "Handled by 'Pickler' below")
+    @Deprecated
     private static final class Callback extends BodyExecutionCallback {
 
         private final String id;
