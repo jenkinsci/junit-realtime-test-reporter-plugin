@@ -3,7 +3,7 @@
   <parent>
     <groupId>org.jenkins-ci.plugins</groupId>
     <artifactId>plugin</artifactId>
-    <version>4.31</version>
+    <version>4.33</version>
     <relativePath />
   </parent>
 
@@ -43,6 +43,10 @@
         <exclusion>
           <groupId>org.apache.maven.wagon</groupId>
           <artifactId>wagon-ftp</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>org.jenkins-ci</groupId>
+          <artifactId>symbol-annotation</artifactId>
         </exclusion>
       </exclusions>
     </dependency>
