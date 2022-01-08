@@ -139,8 +139,12 @@ public class RealtimeJUnitStep extends Step {
 
     @DataBoundSetter
     public void setParseInterval(Long parseInterval) {
-        if (parseInterval == null || parseInterval.longValue() > 0) {
-            this.parseInterval = parseInterval;
+        if (parseInterval != null && parseInterval.longValue() > 0) {
+            // Configuration value is in seconds, parse interval is stored in milliseconds
+            this.parseInterval = parseInterval.longValue() * 1000;
+        } else {
+            // Explicit value not set (or negative), dynamically calculated value will be used
+            this.parseInterval = null;
         }
     }
 
