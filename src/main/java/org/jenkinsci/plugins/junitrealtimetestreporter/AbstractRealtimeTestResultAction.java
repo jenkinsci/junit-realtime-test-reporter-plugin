@@ -23,13 +23,17 @@
  */
 package org.jenkinsci.plugins.junitrealtimetestreporter;
 
+import edu.umd.cs.findbugs.annotations.CheckForNull;
 import hudson.AbortException;
 import hudson.Main;
 import hudson.model.Result;
 import hudson.model.Run;
 import hudson.tasks.junit.TestResult;
 import hudson.tasks.test.AbstractTestResultAction;
+import io.jenkins.plugins.junit.storage.TestResultImpl;
+
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.logging.Level;
@@ -37,13 +41,12 @@ import java.util.logging.Logger;
 import org.kohsuke.stapler.HttpRedirect;
 import org.kohsuke.stapler.StaplerProxy;
 
-import com.google.common.collect.ImmutableSet;
-
 public abstract class AbstractRealtimeTestResultAction extends AbstractTestResultAction<AbstractRealtimeTestResultAction> implements StaplerProxy {
 
     private static final Logger LOGGER = Logger.getLogger(AbstractRealtimeTestResultAction.class.getName());
 
-    protected TestResult previousResult;
+    private int previousResultTestsCount = -1;
+    private float previousResultTestsTime = -1;
     protected TestResult result;
     protected TestProgress progress;
     private transient long updated;
@@ -65,16 +68,21 @@ public abstract class AbstractRealtimeTestResultAction extends AbstractTestResul
             return result;
         }
         try {
-            if (updated == 0 && previousResult == null) {
-                previousResult = findPreviousTestResult();
-            }
-
             final long started = System.currentTimeMillis(); // TODO use nanoTime
             // TODO this can block on Remoting and hang the UI; need to refresh results asynchronously
             result = parse();
             result.setParentAction(this);
-            if (previousResult != null) {
-                progress = new TestProgress(previousResult, result);
+            if (updated == 0 && previousResultTestsCount == -1) {
+                TestResultImpl pluggableStorage = result.getPluggableStorage();
+                TestResult previousResult = pluggableStorage != null ? pluggableStorage.getPreviousResult() : findPreviousTestResult();
+                if (previousResult != null) {
+                    previousResultTestsCount = previousResult.getTotalCount();
+                    previousResultTestsTime = previousResult.getDuration();
+                }
+                
+            }
+            if (previousResultTestsCount != -1) {
+                progress = new TestProgress(previousResultTestsCount, previousResultTestsTime, result);
             }
             if (LOGGER.isLoggable(Level.FINE)) {
                 LOGGER.log(Level.FINE, "Parsing of {0} test results took {1}ms", new Object[] {result.getTotalCount(), System.currentTimeMillis() - started});
@@ -159,16 +167,23 @@ public abstract class AbstractRealtimeTestResultAction extends AbstractTestResul
     }
 
     public static final int NUMBER_OF_BUILDS_TO_SEARCH = 20;
-    public static final ImmutableSet<Result> RESULTS_OF_BUILDS_TO_CONSIDER = ImmutableSet.of(Result.SUCCESS, Result.UNSTABLE);
+    public static final List<Result> RESULTS_OF_BUILDS_TO_CONSIDER = Collections.unmodifiableList(Arrays.asList(Result.SUCCESS, Result.UNSTABLE)); 
 
+    @CheckForNull
     protected static TestResult findPreviousTestResult(Run<?, ?> b) {
         for (int i = 0; i < NUMBER_OF_BUILDS_TO_SEARCH; i++) {// limit the search to a small number to avoid loading too much
             b = b.getPreviousBuild();
-            if (b == null) break;
-            if(!RESULTS_OF_BUILDS_TO_CONSIDER.contains(b.getResult())) continue;
+            if (b == null) {
+                break;
+            }
+            if(!RESULTS_OF_BUILDS_TO_CONSIDER.contains(b.getResult())) {
+                continue;
+            }
 
-            AbstractTestResultAction tra = b.getAction(AbstractTestResultAction.class);
-            if (tra == null) continue;
+            AbstractTestResultAction<?> tra = b.getAction(AbstractTestResultAction.class);
+            if (tra == null) {
+                continue;
+            }
 
             Object o = tra.getResult();
             if (o instanceof TestResult) {

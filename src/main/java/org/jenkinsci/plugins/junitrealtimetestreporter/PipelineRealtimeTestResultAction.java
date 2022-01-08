@@ -25,6 +25,8 @@
 package org.jenkinsci.plugins.junitrealtimetestreporter;
 
 import edu.umd.cs.findbugs.annotations.CheckForNull;
+import edu.umd.cs.findbugs.annotations.NonNull;
+import edu.umd.cs.findbugs.annotations.Nullable;
 import hudson.AbortException;
 import hudson.FilePath;
 import hudson.model.Run;
@@ -37,9 +39,6 @@ import java.io.IOException;
 import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
 
 import org.jenkinsci.plugins.workflow.FilePathUtils;
 import org.jenkinsci.plugins.workflow.actions.LabelAction;
@@ -110,26 +109,8 @@ public class PipelineRealtimeTestResultAction extends AbstractRealtimeTestResult
         if (ws != null && ws.isDirectory()) {
             LOGGER.log(Level.FINE, "parsing {0} in {1} on node {2} for {3}", new Object[] {glob, workspace, node, run});
 
-            FlowNode node = null;
-            TaskListener listener = TaskListener.NULL;
-            // lots of boilerplate code to get access to the flow node and listener but without saving
-            // the StepContext via xstream in case of restarts, we default to using step context if it's available though
-            if (context != null) {
-                node = context.get(FlowNode.class);
-                listener = context.get(TaskListener.class);
-            } else {
-                if (this.run instanceof FlowExecutionOwner.Executable) {
-                    FlowExecutionOwner.Executable executable = (FlowExecutionOwner.Executable) this.run;
-                    FlowExecutionOwner flowOwner = executable.asFlowExecutionOwner();
-                    if (flowOwner != null) {
-                        FlowExecution flowExecution = flowOwner.getOrNull();
-                        if (flowExecution != null) {
-                            node = flowExecution.getNode(id);
-                        }
-                        listener = flowOwner.getListener();
-                    }
-                }
-            }
+            FlowNode node = getFlowNode();
+            TaskListener listener = getTaskListener();
 
             PipelineTestDetails pipelineTestDetails = null;
             if (node != null) {
@@ -149,34 +130,90 @@ public class PipelineRealtimeTestResultAction extends AbstractRealtimeTestResult
         }
     }
 
+    @CheckForNull
     @Override
     protected TestResult findPreviousTestResult() throws IOException, InterruptedException {
-        FlowNode node = context.get(FlowNode.class);
-
-        List<FlowNode> enclosingBlocks = JUnitResultsStepExecution.getEnclosingStagesAndParallels(node);
-        List<String> blockNames = JUnitResultsStepExecution.getEnclosingBlockNames(enclosingBlocks);
-        String blockName = !blockNames.isEmpty() ? blockNames.get(0) : null;
-
-        return findPreviousTestResult(run, blockName);
+        TestResult testResult = null;
+        
+        FlowNode node = getFlowNode();
+        if (node != null) {
+            List<FlowNode> enclosingBlocks = JUnitResultsStepExecution.getEnclosingStagesAndParallels(node);
+            List<String> blockNames = JUnitResultsStepExecution.getEnclosingBlockNames(enclosingBlocks);
+            String blockName = !blockNames.isEmpty() ? blockNames.get(0) : null;
+    
+            testResult = findPreviousTestResult(run, blockName);
+        }
+        
+        return testResult;
+    }
+    
+    // lots of boilerplate code to get access to the flow node and listener but without saving
+    // the StepContext via xstream in case of restarts, we default to using step context if it's available though
+    
+    @CheckForNull
+    private FlowNode getFlowNode() throws IOException, InterruptedException {
+        FlowNode node = null;
+        
+        if (context != null) {
+            node = context.get(FlowNode.class);
+        } else {
+            FlowExecutionOwner flowOwner = getFlowExecutionOwner(this.run);
+            if (flowOwner != null) {
+                FlowExecution flowExecution = flowOwner.getOrNull();
+                if (flowExecution != null) {
+                    node = flowExecution.getNode(id);
+                }
+            }
+        }
+        
+        return node;
+    }
+    
+    private TaskListener getTaskListener() throws IOException, InterruptedException {
+        TaskListener listener = TaskListener.NULL;
+        
+        if (context != null) {
+            listener = context.get(TaskListener.class);
+        } else {
+            FlowExecutionOwner flowOwner = getFlowExecutionOwner(this.run);
+            if (flowOwner != null) {
+                listener = flowOwner.getListener();
+            }
+        }
+        
+        return listener;
     }
 
+    @CheckForNull
+    private static FlowExecutionOwner getFlowExecutionOwner(Run<?, ?> build) {
+        FlowExecutionOwner flowOwner = null;
+        
+        if (build instanceof FlowExecutionOwner.Executable) {
+            FlowExecutionOwner.Executable executable = (FlowExecutionOwner.Executable) build;
+            flowOwner = executable.asFlowExecutionOwner();
+        }
+        
+        return flowOwner;
+    }
+
+    @CheckForNull
     private static TestResult findPreviousTestResult(Run<?, ?> build, final String blockName) {
         TestResult tr = findPreviousTestResult(build);
-        if (tr != null) {
-            Run<?, ?> prevRun = tr.getRun();
-            if (prevRun instanceof FlowExecutionOwner.Executable && blockName != null) {
-                FlowExecutionOwner owner = ((FlowExecutionOwner.Executable)prevRun).asFlowExecutionOwner();
-                if (owner != null) {
-                    FlowExecution execution = owner.getOrNull();
+        if (tr != null && blockName != null) {
+            FlowExecutionOwner owner = getFlowExecutionOwner(tr.getRun());
+            if (owner != null) {
+                try {
+                    FlowExecution execution = owner.get();
                     if (execution != null) {
                         DepthFirstScanner scanner = new DepthFirstScanner();
                         FlowNode stageId = scanner.findFirstMatch(execution, new BlockNamePredicate(blockName));
                         if (stageId != null) {
-                            tr = ((hudson.tasks.junit.TestResult) tr).getResultForPipelineBlock(stageId.getId());
+                            tr = ((TestResult) tr).getResultForPipelineBlock(stageId.getId());
                         } else {
                             tr = null;
                         }
                     }
+                } catch (IOException e) {
                 }
             }
         }
@@ -185,7 +222,7 @@ public class PipelineRealtimeTestResultAction extends AbstractRealtimeTestResult
 
     static class BlockNamePredicate implements Predicate<FlowNode> {
         private final String blockName;
-        public BlockNamePredicate(@Nonnull String blockName) {
+        public BlockNamePredicate(@NonNull String blockName) {
             this.blockName = blockName;
         }
         @Override

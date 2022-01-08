@@ -28,6 +28,7 @@ import hudson.slaves.DumbSlave;
 import hudson.tasks.junit.TestResult;
 import hudson.tasks.junit.TestResultAction;
 import java.util.Collections;
+import java.util.List;
 import java.util.logging.Level;
 
 import org.jenkinsci.plugins.junitrealtimetestreporter.PipelineRealtimeTestResultAction.BlockNamePredicate;
@@ -239,7 +240,7 @@ public class RealtimeJUnitStepTest {
     }
 
     @Test
-    public void testProgress() {
+    public void testProgressNoStageSingleInstance() {
         rr.then(r -> {
             WorkflowJob p = r.jenkins.createProject(WorkflowJob.class, "p");
             p.setDefinition(new CpsFlowDefinition(
@@ -301,6 +302,143 @@ public class RealtimeJUnitStepTest {
             assertEquals(0, progress.getTimeLeftPercentage());
             assertEquals("0 sec", progress.getEstimatedRemainingTime());
             SemaphoreStep.success("post/2", null);
+    
+            SemaphoreStep.success("final/2", null);
+        });
+    }
+
+    @Test
+    public void testProgressParallelStagesAndRestart() {
+        rr.then(r -> {
+            WorkflowJob p = r.jenkins.createProject(WorkflowJob.class, "p");
+            p.setDefinition(new CpsFlowDefinition(
+                "node {\n" +
+                "  parallel('firstBranch': {\n" +
+                "    stage('stage1') {\n" +
+                "      realtimeJUnit('stage1_*.xml') {\n" +
+                "        semaphore 'pre1'\n" +
+                "        writeFile text: '''<testsuite name='a' time='4'><testcase name='a1' time='1'/><testcase name='a2' time='3'/></testsuite>''', file: 'stage1_a.xml'\n" +
+                "        semaphore 'mid1'\n" +
+                "        writeFile text: '''<testsuite name='b' time='6'><testcase name='b1' time='2'/><testcase name='b2' time='4'><error>b2 failed</error></testcase></testsuite>''', file: 'stage1_b.xml'\n" +
+                "        semaphore 'post1'\n" +
+                "      }\n" +
+                "    }\n" +
+                "  }, 'secondBranch': {\n" +
+                "    stage('stage2') {\n" +
+                "      realtimeJUnit('stage2_*.xml') {\n" +
+                "        semaphore 'pre2'\n" +
+                "        writeFile text: '''<testsuite name='c' time='12'><testcase name='c1' time='4'/><testcase name='c2' time='5'/><testcase name='c3' time='3'/></testsuite>''', file: 'stage2_c.xml'\n" +
+                "        semaphore 'mid2'\n" +
+                "        writeFile text: '''<testsuite name='d' time='16'><testcase name='d1' time='7'/><testcase name='d2' time='9'><error>d2 failed</error></testcase></testsuite>''', file: 'stage2_d.xml'\n" +
+                "        semaphore 'post2'\n" +
+                "      }\n" +
+                "    }\n" +
+                "  })\n" +
+                "  deleteDir()\n" +
+                "}; semaphore 'final'", true));
+            SemaphoreStep.success("pre1/1", null);
+            SemaphoreStep.success("pre2/1", null);
+            SemaphoreStep.success("mid1/1", null);
+            SemaphoreStep.success("mid2/1", null);
+            SemaphoreStep.success("post1/1", null);
+            SemaphoreStep.success("post2/1", null);
+            SemaphoreStep.success("final/1", null);
+            p.scheduleBuild2(0).get();
+    
+            WorkflowRun b2 = p.scheduleBuild2(0).waitForStart();
+    
+            SemaphoreStep.waitForStart("pre1/2", b2);
+            SemaphoreStep.waitForStart("pre2/2", b2);
+        });
+        rr.then(r -> {
+            WorkflowRun b2 = rr.j.jenkins.getItemByFullName("p", WorkflowJob.class).getBuildByNumber(2);
+            List<AbstractRealtimeTestResultAction> actions = b2.getActions(AbstractRealtimeTestResultAction.class);
+            assertEquals(2, actions.size());
+            
+            AbstractRealtimeTestResultAction rta1 = actions.get(0);
+            AbstractRealtimeTestResultAction rta2 = actions.get(1);
+            
+            TestResult result1 = rta1.getResult();
+            assertNull(result1);
+            TestProgress progress1 = rta1.getTestProgress();
+            assertNull(progress1);
+            
+            TestResult result2 = rta2.getResult();
+            assertNull(result2);
+            TestProgress progress2 = rta2.getTestProgress();
+            assertNull(progress2);
+
+            SemaphoreStep.success("pre1/2", null);
+            SemaphoreStep.success("pre2/2", null);
+            SemaphoreStep.waitForStart("mid1/2", b2);
+            SemaphoreStep.waitForStart("mid2/2", b2);
+            if (rta1.getTotalCount() == 3) {
+                // switch we got the actions in reverse order
+                rta1 = actions.get(1);
+                rta2 = actions.get(0);
+            }
+            
+            result1 = rta1.getResult();
+            assertNotNull(result1);
+            progress1 = rta1.getTestProgress();
+            assertNotNull(progress1);
+            assertEquals(4, progress1.getExpectedTests());
+            assertEquals(2, progress1.getCompletedTests());
+            assertEquals(50, progress1.getCompletedTestsPercentage());
+            assertEquals(50, progress1.getTestsLeftPercentage());
+            assertEquals(10, progress1.getExpectedTime(), 0);
+            assertEquals(4, progress1.getCompletedTime(), 0);
+            assertEquals(40, progress1.getCompletedTimePercentage());
+            assertEquals(60, progress1.getTimeLeftPercentage());
+            assertEquals("6 sec", progress1.getEstimatedRemainingTime());
+            SemaphoreStep.success("mid1/2", null);
+    
+            result2 = rta2.getResult();
+            assertNotNull(result2);
+            progress2 = rta2.getTestProgress();
+            assertNotNull(progress2);
+            assertEquals(5, progress2.getExpectedTests());
+            assertEquals(3, progress2.getCompletedTests());
+            assertEquals(60, progress2.getCompletedTestsPercentage());
+            assertEquals(40, progress2.getTestsLeftPercentage());
+            assertEquals(28, progress2.getExpectedTime(), 0);
+            assertEquals(12, progress2.getCompletedTime(), 0);
+            assertEquals(42, progress2.getCompletedTimePercentage());
+            assertEquals(58, progress2.getTimeLeftPercentage());
+            assertEquals("16 sec", progress2.getEstimatedRemainingTime());
+            SemaphoreStep.success("mid2/2", null);
+    
+            SemaphoreStep.waitForStart("post1/2", b2);
+            result1 = rta1.getResult();
+            assertNotNull(result1);
+            progress1 = rta1.getTestProgress();
+            assertNotNull(progress1);
+            assertEquals(4, progress1.getExpectedTests());
+            assertEquals(4, progress1.getCompletedTests());
+            assertEquals(100, progress1.getCompletedTestsPercentage());
+            assertEquals(0, progress1.getTestsLeftPercentage());
+            assertEquals(10, progress1.getExpectedTime(), 0);
+            assertEquals(10, progress1.getCompletedTime(), 0);
+            assertEquals(100, progress1.getCompletedTimePercentage());
+            assertEquals(0, progress1.getTimeLeftPercentage());
+            assertEquals("0 sec", progress1.getEstimatedRemainingTime());
+            SemaphoreStep.success("post1/2", null);
+    
+            SemaphoreStep.waitForStart("post2/2", b2);
+            result2 = rta2.getResult();
+            assertNotNull(result2);
+            progress2 = rta2.getTestProgress();
+            assertNotNull(progress2);
+            assertEquals(5, progress2.getExpectedTests());
+            assertEquals(5, progress2.getCompletedTests());
+            assertEquals(100, progress2.getCompletedTestsPercentage());
+            assertEquals(0, progress2.getTestsLeftPercentage());
+            assertEquals(28, progress2.getExpectedTime(), 0);
+            assertEquals(28, progress2.getCompletedTime(), 0);
+            assertEquals(100, progress2.getCompletedTimePercentage());
+            assertEquals(0, progress2.getTimeLeftPercentage());
+            assertEquals("0 sec", progress2.getEstimatedRemainingTime());
+            SemaphoreStep.success("post2/2", null);
     
             SemaphoreStep.success("final/2", null);
         });
