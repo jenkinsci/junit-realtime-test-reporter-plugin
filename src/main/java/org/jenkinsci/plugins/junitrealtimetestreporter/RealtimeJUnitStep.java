@@ -139,13 +139,7 @@ public class RealtimeJUnitStep extends Step {
 
     @DataBoundSetter
     public void setParseInterval(Long parseInterval) {
-        if (parseInterval != null && parseInterval.longValue() > 0) {
-            // Configuration value is in seconds, parse interval is stored in milliseconds
-            this.parseInterval = parseInterval.longValue() * 1000;
-        } else {
-            // Explicit value not set (or negative), dynamically calculated value will be used
-            this.parseInterval = null;
-        }
+        this.parseInterval = parseInterval;
     }
 
     @Override
@@ -156,6 +150,8 @@ public class RealtimeJUnitStep extends Step {
         delegate.setKeepLongStdio(keepLongStdio);
         delegate.setTestDataPublishers(getTestDataPublishers());
         delegate.setSkipMarkingBuildUnstable(isSkipMarkingBuildUnstable());
+        // step takes value in milliseconds but users provide in seconds
+        Long parseInterval = this.parseInterval != null ? this.parseInterval * 1000 : null;
         return new Execution2(context, delegate, parseInterval);
     }
 
