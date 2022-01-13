@@ -55,13 +55,15 @@ class PipelineRealtimeTestResultAction extends AbstractRealtimeTestResultAction 
     private final String glob;
     @CheckForNull
     private transient final StepContext context;
+    private final Long parseInterval;
 
     PipelineRealtimeTestResultAction(
             String id,
             FilePath ws,
             boolean keepLongStdio,
             String glob,
-            StepContext context
+            StepContext context,
+            Long parseInterval
     ) {
         this.id = id;
         node = FilePathUtils.getNodeName(ws);
@@ -69,6 +71,7 @@ class PipelineRealtimeTestResultAction extends AbstractRealtimeTestResultAction 
         this.keepLongStdio = keepLongStdio;
         this.glob = glob;
         this.context = context;
+        this.parseInterval = parseInterval;
     }
 
     @Override
@@ -84,6 +87,11 @@ class PipelineRealtimeTestResultAction extends AbstractRealtimeTestResultAction 
     @Override
     public String getUrlName() {
         return "realtimeTestReport-" + id;
+    }
+
+    @Override
+    protected long getParseInterval() {
+        return parseInterval != null ? parseInterval.longValue() : super.getParseInterval();
     }
 
     @Override

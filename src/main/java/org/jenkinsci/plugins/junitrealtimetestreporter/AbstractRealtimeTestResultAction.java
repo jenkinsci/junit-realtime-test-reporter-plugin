@@ -49,12 +49,10 @@ abstract class AbstractRealtimeTestResultAction extends AbstractTestResultAction
 
     @Override
     public TestResult getResult() {
-        // Refresh every 1/100 of a job estimated duration but not more often than every 5 seconds
-        final long threshold = Math.max(5000, run.getEstimatedDuration() / 100);
+        final long threshold = getParseInterval();
         // TODO possible improvements:
         // · always run parse in case result == null
         // · run parse regardless of cache if result.getTotalCount() == 0
-        // · refresh no less often than every 1m even if job is estimated to take >100m
         if (updated > System.currentTimeMillis() - threshold && !Main.isUnitTest) {
             LOGGER.fine("Cache hit");
             return result;
@@ -80,6 +78,13 @@ abstract class AbstractRealtimeTestResultAction extends AbstractTestResultAction
             LOGGER.log(Level.WARNING, "Unable to parse", ex);
         }
         return result;
+    }
+
+    protected long getParseInterval() {
+        // Refresh every 1/100 of a job estimated duration but not more often than every 5 seconds
+        return Math.max(5000, run.getEstimatedDuration() / 100);
+        // TODO possible improvements:
+        // · refresh no less often than every 1m even if job is estimated to take >100m
     }
 
     @Override

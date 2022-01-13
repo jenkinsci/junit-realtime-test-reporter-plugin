@@ -76,6 +76,7 @@ public class RealtimeJUnitStep extends Step {
     private Double healthScaleFactor;
     private boolean allowEmptyResults;
     private boolean skipMarkingBuildUnstable;
+    private Long parseInterval;
 
     @DataBoundConstructor
     public RealtimeJUnitStep(String testResults) {
@@ -132,6 +133,15 @@ public class RealtimeJUnitStep extends Step {
         this.skipMarkingBuildUnstable = skipMarkingBuildUnstable;
     }
 
+    public Long getParseInterval() {
+        return parseInterval;
+    }
+
+    @DataBoundSetter
+    public void setParseInterval(Long parseInterval) {
+        this.parseInterval = parseInterval;
+    }
+
     @Override
     public StepExecution start(StepContext context) throws Exception {
         JUnitResultArchiver delegate = new JUnitResultArchiver(testResults);
@@ -140,16 +150,20 @@ public class RealtimeJUnitStep extends Step {
         delegate.setKeepLongStdio(keepLongStdio);
         delegate.setTestDataPublishers(getTestDataPublishers());
         delegate.setSkipMarkingBuildUnstable(isSkipMarkingBuildUnstable());
-        return new Execution2(context, delegate);
+        // step takes value in milliseconds but users provide in seconds
+        Long parseInterval = this.parseInterval != null ? this.parseInterval * 1000 : null;
+        return new Execution2(context, delegate, parseInterval);
     }
 
     @SuppressFBWarnings("SE_BAD_FIELD") // FIXME
     static class Execution2 extends GeneralNonBlockingStepExecution {
         private final JUnitResultArchiver archiver;
+        private final Long parseInterval;
 
-        Execution2(StepContext context, JUnitResultArchiver archiver) {
+        Execution2(StepContext context, JUnitResultArchiver archiver, Long parseInterval) {
             super(context);
             this.archiver = archiver;
+            this.parseInterval = parseInterval;
         }
 
         @Override
@@ -168,7 +182,8 @@ public class RealtimeJUnitStep extends Step {
                             context.get(FilePath.class),
                             archiver.isKeepLongStdio(),
                             archiver.getTestResults(),
-                            context
+                            context,
+                            parseInterval
                     )
             );
             AbstractRealtimeTestResultAction.saveBuild(r);
@@ -249,7 +264,8 @@ public class RealtimeJUnitStep extends Step {
                             context.get(FilePath.class),
                             archiver.isKeepLongStdio(),
                             archiver.getTestResults(),
-                            context
+                            context,
+                            null
                     )
             );
             AbstractRealtimeTestResultAction.saveBuild(r);
