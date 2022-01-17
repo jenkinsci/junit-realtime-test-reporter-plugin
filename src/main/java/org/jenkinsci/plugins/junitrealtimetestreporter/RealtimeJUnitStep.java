@@ -40,6 +40,9 @@ import hudson.tasks.junit.TestResultAction;
 import hudson.tasks.junit.TestResultSummary;
 import hudson.tasks.junit.pipeline.JUnitResultsStepExecution;
 import hudson.tasks.test.PipelineTestDetails;
+import io.jenkins.plugins.junit.storage.FileJunitTestResultStorage;
+import io.jenkins.plugins.junit.storage.JunitTestResultStorage;
+import io.jenkins.plugins.junit.storage.JunitTestResultStorage.RemotePublisher;
 
 import java.io.IOException;
 import java.util.Collections;
@@ -319,7 +322,15 @@ public class RealtimeJUnitStep extends Step {
         } catch (Exception x) {
             if (provisional != null) {
                 listener.getLogger().println("Final archiving failed; recording " + provisional.getTotalCount() + " provisional test results.");
-                r.addAction(new TestResultAction(r, provisional, listener));
+
+                JunitTestResultStorage storage = JunitTestResultStorage.find();
+                if (storage instanceof FileJunitTestResultStorage) {
+                    r.addAction(new TestResultAction(r, provisional, listener));
+                } else {
+                    RemotePublisher publisher = storage.createRemotePublisher(r);
+                    publisher.publish(provisional, listener);
+                    r.addAction(new TestResultAction(r, new TestResult(storage.load(r.getParent().getFullName(), r.getNumber())), listener));
+                }
             }
             throw x;
         }
