@@ -33,6 +33,7 @@ import hudson.tasks.junit.TestResult;
 import hudson.tasks.junit.pipeline.JUnitResultsStepExecution;
 import hudson.tasks.test.PipelineTestDetails;
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -44,7 +45,7 @@ import org.jenkinsci.plugins.workflow.steps.StepContext;
 
 import static java.util.Objects.requireNonNull;
 
-class PipelineRealtimeTestResultAction extends AbstractRealtimeTestResultAction {
+public class PipelineRealtimeTestResultAction extends AbstractRealtimeTestResultAction {
 
     private static final Logger LOGGER = Logger.getLogger(PipelineRealtimeTestResultAction.class.getName());
 
@@ -139,4 +140,16 @@ class PipelineRealtimeTestResultAction extends AbstractRealtimeTestResultAction 
         }
     }
 
+    @CheckForNull
+    @Override
+    protected TestResult findPreviousTestResult() throws IOException, InterruptedException {
+        TestResult testResult = findPreviousTestResult(run);
+        
+        if (testResult != null) {
+            testResult = testResult.getResultByNodes(Arrays.asList(id));
+        }
+        
+        return testResult;
+    }
+    
 }
