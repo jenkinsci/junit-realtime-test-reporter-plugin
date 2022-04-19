@@ -1,0 +1,4 @@
+<?jelly escape-by-default='true'?>
+<div>
+  Publishes test results while tests run, rather than waiting for completion.
+</div>
