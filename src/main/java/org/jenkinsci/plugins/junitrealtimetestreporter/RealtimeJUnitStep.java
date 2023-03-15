@@ -142,7 +142,11 @@ public class RealtimeJUnitStep extends Step {
 
     @DataBoundSetter
     public void setParseInterval(Long parseInterval) {
-        this.parseInterval = parseInterval;
+        if (parseInterval == 0L) {
+            this.parseInterval = null;
+        } else {
+            this.parseInterval = parseInterval;
+        }
     }
 
     @Override
