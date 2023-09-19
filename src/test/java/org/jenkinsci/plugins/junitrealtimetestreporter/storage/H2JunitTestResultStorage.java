@@ -18,6 +18,7 @@ import hudson.tasks.junit.TestResult;
 import hudson.tasks.junit.TestResultSummary;
 import hudson.tasks.junit.TrendTestResultSummary;
 import hudson.tasks.test.PipelineTestDetails;
+import hudson.util.XStream2;
 import io.jenkins.plugins.junit.storage.JunitTestResultStorage;
 import io.jenkins.plugins.junit.storage.JunitTestResultStorageDescriptor;
 import io.jenkins.plugins.junit.storage.TestResultImpl;
@@ -731,7 +732,7 @@ public class H2JunitTestResultStorage extends JunitTestResultStorage {
      */
     static class RemoteConnectionSupplier extends ConnectionSupplier implements SerializableOnlyOverRemoting {
 
-        private static final XStream XSTREAM = new XStream();
+        private static final XStream XSTREAM = new XStream2();
         private final String databaseXml;
 
         static {
