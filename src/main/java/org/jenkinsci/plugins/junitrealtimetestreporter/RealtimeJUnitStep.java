@@ -421,7 +421,9 @@ public class RealtimeJUnitStep extends Step {
         // seem to pick up doFillXxxItems methods automatically, so we have to explicitly
         // delegate to the JUnitResultArchiver's descriptor class
         public ListBoxModel doFillStdioRetentionItems(@QueryParameter("stdioRetention") String value) {
-            return new JUnitResultArchiver.DescriptorImpl().doFillStdioRetentionItems(value);
+            JUnitResultArchiver.DescriptorImpl descriptor = Jenkins.get()
+                    .getDescriptorByType(JUnitResultArchiver.DescriptorImpl.class);
+            return descriptor.doFillStdioRetentionItems(value);
         }
 
     }
