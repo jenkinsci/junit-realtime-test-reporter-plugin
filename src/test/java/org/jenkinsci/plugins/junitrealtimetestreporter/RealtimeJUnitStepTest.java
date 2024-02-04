@@ -208,6 +208,8 @@ public class RealtimeJUnitStepTest {
                 rr.j.assertEqualDataBoundBeans(s, t.configRoundTrip(s));
                 s.setKeepLongStdio(true);
                 rr.j.assertEqualDataBoundBeans(s, t.configRoundTrip(s));
+                s.setStdioRetention("FAILED");
+                rr.j.assertEqualDataBoundBeans(s, t.configRoundTrip(s));
                 s.setSkipMarkingBuildUnstable(true);
                 rr.j.assertEqualDataBoundBeans(s, t.configRoundTrip(s));
         });
