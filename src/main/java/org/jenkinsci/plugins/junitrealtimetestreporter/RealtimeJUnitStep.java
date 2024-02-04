@@ -34,12 +34,14 @@ import hudson.model.Result;
 import hudson.model.Run;
 import hudson.model.TaskListener;
 import hudson.tasks.junit.JUnitResultArchiver;
+import hudson.tasks.junit.StdioRetention;
 import hudson.tasks.junit.TestDataPublisher;
 import hudson.tasks.junit.TestResult;
 import hudson.tasks.junit.TestResultAction;
 import hudson.tasks.junit.TestResultSummary;
 import hudson.tasks.junit.pipeline.JUnitResultsStepExecution;
 import hudson.tasks.test.PipelineTestDetails;
+import hudson.util.ListBoxModel;
 import io.jenkins.plugins.junit.storage.FileJunitTestResultStorage;
 import io.jenkins.plugins.junit.storage.JunitTestResultStorage;
 import io.jenkins.plugins.junit.storage.JunitTestResultStorage.RemotePublisher;
@@ -65,6 +67,7 @@ import org.jenkinsci.plugins.workflow.steps.StepExecution;
 import org.jenkinsci.plugins.workflow.support.pickles.XStreamPickle;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.DataBoundSetter;
+import org.kohsuke.stapler.QueryParameter;
 
 import static java.util.Objects.requireNonNull;
 
@@ -74,7 +77,7 @@ public class RealtimeJUnitStep extends Step {
 
     // Unfortunately keeping a field of type JUnitResultArchiver does not work well because realtimeJUnit(junit('*.xml')) would try to run the junit step immediately, so we need to inline its state:
     private final String testResults;
-    private boolean keepLongStdio;
+    private String stdioRetention;
     private List<TestDataPublisher> testDataPublishers;
     private Double healthScaleFactor;
     private boolean allowEmptyResults;
@@ -90,13 +93,24 @@ public class RealtimeJUnitStep extends Step {
         return testResults;
     }
 
+    @Deprecated
     public boolean isKeepLongStdio() {
-        return keepLongStdio;
+        return StdioRetention.parse(stdioRetention) == StdioRetention.ALL;
     }
 
     @DataBoundSetter
+    @Deprecated
     public void setKeepLongStdio(boolean keepLongStdio) {
-        this.keepLongStdio = keepLongStdio;
+        this.stdioRetention = StdioRetention.fromKeepLongStdio(keepLongStdio).name();
+    }
+
+    public String getStdioRetention() {
+        return stdioRetention == null ? StdioRetention.DEFAULT.name() : stdioRetention;
+    }
+
+    @DataBoundSetter
+    public void setStdioRetention(String stdioRetention) {
+        this.stdioRetention = stdioRetention;
     }
 
     @Nonnull
@@ -154,7 +168,7 @@ public class RealtimeJUnitStep extends Step {
         JUnitResultArchiver delegate = new JUnitResultArchiver(testResults);
         delegate.setAllowEmptyResults(allowEmptyResults);
         delegate.setHealthScaleFactor(getHealthScaleFactor());
-        delegate.setKeepLongStdio(keepLongStdio);
+        delegate.setStdioRetention(stdioRetention);
         delegate.setTestDataPublishers(getTestDataPublishers());
         delegate.setSkipMarkingBuildUnstable(isSkipMarkingBuildUnstable());
         // step takes value in milliseconds but users provide in seconds
@@ -401,6 +415,13 @@ public class RealtimeJUnitStep extends Step {
 
         public Descriptor<?> getDelegateDescriptor() {
             return Jenkins.getInstance().getDescriptor(JUnitResultArchiver.class);
+        }
+
+        // Hack: using the delegate pattern with a <st:include> Jelly element doesn't
+        // seem to pick up doFillXxxItems methods automatically, so we have to explicitly
+        // delegate to the JUnitResultArchiver's descriptor class
+        public ListBoxModel doFillStdioRetentionItems(@QueryParameter("stdioRetention") String value) {
+            return new JUnitResultArchiver.DescriptorImpl().doFillStdioRetentionItems(value);
         }
 
     }
