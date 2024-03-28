@@ -52,7 +52,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import javax.annotation.Nonnull;
+import edu.umd.cs.findbugs.annotations.NonNull;
 import jenkins.model.Jenkins;
 import org.jenkinsci.plugins.workflow.actions.WarningAction;
 import org.jenkinsci.plugins.workflow.graph.FlowNode;
@@ -113,13 +113,13 @@ public class RealtimeJUnitStep extends Step {
         this.stdioRetention = stdioRetention;
     }
 
-    @Nonnull
+    @NonNull
     public List<TestDataPublisher> getTestDataPublishers() {
         return testDataPublishers == null ? Collections.<TestDataPublisher>emptyList() : testDataPublishers;
     }
 
     @DataBoundSetter
-    public void setTestDataPublishers(@Nonnull List<TestDataPublisher> testDataPublishers) {
+    public void setTestDataPublishers(@NonNull List<TestDataPublisher> testDataPublishers) {
         this.testDataPublishers = testDataPublishers;
     }
 
