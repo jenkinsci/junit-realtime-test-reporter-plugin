@@ -30,7 +30,7 @@
   <properties>
     <changelist>999999-SNAPSHOT</changelist>
     <gitHubRepo>jenkinsci/junit-realtime-test-reporter-plugin</gitHubRepo>
-    <jenkins.version>2.387.3</jenkins.version>
+    <jenkins.version>2.414.3</jenkins.version>
     <!-- Using JUnit pluggable storage -->
     <useBeta>true</useBeta>
   </properties>
@@ -39,7 +39,6 @@
     <dependency>
       <groupId>org.jenkins-ci.main</groupId>
       <artifactId>maven-plugin</artifactId>
-      <version>3.23</version>
       <optional>true</optional>
       <exclusions>
         <exclusion>
@@ -59,10 +58,6 @@
     <dependency>
       <groupId>org.jenkins-ci.plugins</groupId>
       <artifactId>junit</artifactId>
-
-      <!-- TODO: Remove explicit version once BOM is bumped to a version that
-           pulls this in automatically -->
-      <version>1265.v65b_14fa_f12f0</version>
     </dependency>
     <dependency>
       <groupId>org.jenkins-ci.plugins</groupId>
@@ -126,19 +121,11 @@
     <dependency>
       <groupId>org.jenkins-ci.plugins</groupId>
       <artifactId>database</artifactId>
-      <version>191.vd5981b_97a_5fa_</version>
       <scope>test</scope>
-      <exclusions>
-        <exclusion>
-          <groupId>net.bytebuddy</groupId>
-          <artifactId>byte-buddy</artifactId>
-        </exclusion>
-      </exclusions>
     </dependency>
     <dependency>
       <groupId>org.jenkins-ci.plugins</groupId>
       <artifactId>database-h2</artifactId>
-      <version>1.2</version>
       <scope>test</scope>
     </dependency>
     <dependency>
@@ -152,8 +139,8 @@
     <dependencies>
       <dependency>
         <groupId>io.jenkins.tools.bom</groupId>
-        <artifactId>bom-2.387.x</artifactId>
-        <version>2543.vfb_1a_5fb_9496d</version>
+        <artifactId>bom-2.414.x</artifactId>
+        <version>2950.va_633b_f42f759</version>
         <scope>import</scope>
         <type>pom</type>
       </dependency>
