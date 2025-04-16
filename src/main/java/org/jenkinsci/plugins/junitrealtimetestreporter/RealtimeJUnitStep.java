@@ -176,7 +176,6 @@ public class RealtimeJUnitStep extends Step {
         return new Execution2(context, delegate, parseInterval);
     }
 
-    @SuppressFBWarnings("SE_BAD_FIELD") // FIXME
     static class Execution2 extends GeneralNonBlockingStepExecution {
         private final JUnitResultArchiver archiver;
         private final Long parseInterval;
@@ -211,7 +210,6 @@ public class RealtimeJUnitStep extends Step {
             context.newBodyInvoker().withCallback(new Callback2(id, archiver)).start();
         }
 
-        @SuppressFBWarnings(value = "SE_BAD_FIELD", justification = "Handled by 'Pickler' below")
         private final class Callback2 extends BodyExecutionCallback {
 
             private final String id;
