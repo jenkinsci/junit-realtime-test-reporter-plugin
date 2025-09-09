@@ -1,23 +1,22 @@
 package org.jenkinsci.plugins.junitrealtimetestreporter;
 
-import static org.junit.Assert.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.BDDMockito.given;
-
-import org.junit.Test;
-import org.junit.runner.RunWith;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
-import org.mockito.junit.MockitoJUnitRunner;
 
 import hudson.tasks.junit.TestResult;
+import org.mockito.junit.jupiter.MockitoExtension;
 
-@RunWith(MockitoJUnitRunner.class)
-public class TestProgressTest {
+@ExtendWith(MockitoExtension.class)
+class TestProgressTest {
 
     @Mock
     private TestResult realtimeResult;
-    
+
     @Test
-    public void estimatedRemainingTimeInMinutes() throws Exception {
+    void estimatedRemainingTimeInMinutes() throws Exception {
         int expectedTests = 1;
         float expectedTime = 3 * 60;
         
@@ -27,9 +26,9 @@ public class TestProgressTest {
 
         assertEquals("2 min 0 sec", testProgress.getEstimatedRemainingTime());
     }
-    
+
     @Test
-    public void estimatedRemainingTimeInSeconds() throws Exception {
+    void estimatedRemainingTimeInSeconds() throws Exception {
         int expectedTests = 1;
         float expectedTime = 65;
         
@@ -39,9 +38,9 @@ public class TestProgressTest {
 
         assertEquals("59 sec", testProgress.getEstimatedRemainingTime());
     }
-    
+
     @Test
-    public void estimatedRemainingTimeWhenCurrentTestsAreLonger() throws Exception {
+    void estimatedRemainingTimeWhenCurrentTestsAreLonger() throws Exception {
         int expectedTests = 1;
         float expectedTime = 65;
         
@@ -51,9 +50,9 @@ public class TestProgressTest {
 
         assertEquals("0 sec", testProgress.getEstimatedRemainingTime());
     }
-    
+
     @Test
-    public void estimatedRemainingTimeWhenExpectedIsZero() throws Exception {
+    void estimatedRemainingTimeWhenExpectedIsZero() throws Exception {
         int expectedTests = 1;
         float expectedTime = 0;
         
@@ -63,9 +62,9 @@ public class TestProgressTest {
 
         assertEquals("0 sec", testProgress.getEstimatedRemainingTime());
     }
-    
+
     @Test
-    public void completedTestsPercentage() throws Exception {
+    void completedTestsPercentage() throws Exception {
         int expectedTests = 9;
         float expectedTime = 30;
         
@@ -75,9 +74,9 @@ public class TestProgressTest {
 
         assertEquals(33, testProgress.getCompletedTestsPercentage());
     }
-    
+
     @Test
-    public void completedTestsPercentageWhenMoreTests() throws Exception {
+    void completedTestsPercentageWhenMoreTests() throws Exception {
         int expectedTests = 9;
         float expectedTime = 30;
         
@@ -87,9 +86,9 @@ public class TestProgressTest {
 
         assertEquals(100, testProgress.getCompletedTestsPercentage());
     }
-    
+
     @Test
-    public void completedTestsPercentageWhenExpectedTestsIsZero() throws Exception {
+    void completedTestsPercentageWhenExpectedTestsIsZero() throws Exception {
         int expectedTests = 0;
         float expectedTime = 30;
         
@@ -99,9 +98,9 @@ public class TestProgressTest {
 
         assertEquals(100, testProgress.getCompletedTestsPercentage());
     }
-    
+
     @Test
-    public void completedTestsPercentageWhenCurrentTestsIsZero() throws Exception {
+    void completedTestsPercentageWhenCurrentTestsIsZero() throws Exception {
         int expectedTests = 2;
         float expectedTime = 30;
         
@@ -111,9 +110,9 @@ public class TestProgressTest {
 
         assertEquals(0, testProgress.getCompletedTestsPercentage());
     }
-    
+
     @Test
-    public void testsLeftPercentage() throws Exception {
+    void testsLeftPercentage() throws Exception {
         int expectedTests = 9;
         float expectedTime = 30;
         
@@ -123,9 +122,9 @@ public class TestProgressTest {
 
         assertEquals(67, testProgress.getTestsLeftPercentage());
     }
-    
+
     @Test
-    public void testsLeftPercentageWhenMoreTests() throws Exception {
+    void testsLeftPercentageWhenMoreTests() throws Exception {
         int expectedTests = 9;
         float expectedTime = 30;
         
@@ -135,9 +134,9 @@ public class TestProgressTest {
 
         assertEquals(0, testProgress.getTestsLeftPercentage());
     }
-    
+
     @Test
-    public void testsLeftPercentageWhenExpectedTestsIsZero() throws Exception {
+    void testsLeftPercentageWhenExpectedTestsIsZero() throws Exception {
         int expectedTests = 0;
         float expectedTime = 30;
         
@@ -147,9 +146,9 @@ public class TestProgressTest {
 
         assertEquals(0, testProgress.getTestsLeftPercentage());
     }
-    
+
     @Test
-    public void testsLeftPercentageWhenCurrentTestsIsZero() throws Exception {
+    void testsLeftPercentageWhenCurrentTestsIsZero() throws Exception {
         int expectedTests = 2;
         float expectedTime = 30;
         
@@ -159,9 +158,9 @@ public class TestProgressTest {
 
         assertEquals(100, testProgress.getTestsLeftPercentage());
     }
-    
+
     @Test
-    public void completedTimePercentage() throws Exception {
+    void completedTimePercentage() throws Exception {
         int expectedTests = 10;
         float expectedTime = 90;
         
@@ -171,9 +170,9 @@ public class TestProgressTest {
 
         assertEquals(33, testProgress.getCompletedTimePercentage());
     }
-    
+
     @Test
-    public void completedTimePercentageWhenCurrentTestsAreLonger() throws Exception {
+    void completedTimePercentageWhenCurrentTestsAreLonger() throws Exception {
         int expectedTests = 10;
         float expectedTime = 90;
         
@@ -183,9 +182,9 @@ public class TestProgressTest {
 
         assertEquals(100, testProgress.getCompletedTimePercentage());
     }
-    
+
     @Test
-    public void completedTimePercentageWhenExpectedIsZero() throws Exception {
+    void completedTimePercentageWhenExpectedIsZero() throws Exception {
         int expectedTests = 10;
         float expectedTime = 0;
         
@@ -195,9 +194,9 @@ public class TestProgressTest {
 
         assertEquals(100, testProgress.getCompletedTimePercentage());
     }
-    
+
     @Test
-    public void completedTimePercentageWhenCurrentIsZero() throws Exception {
+    void completedTimePercentageWhenCurrentIsZero() throws Exception {
         int expectedTests = 2;
         float expectedTime = 90;
         
@@ -207,9 +206,9 @@ public class TestProgressTest {
 
         assertEquals(0, testProgress.getCompletedTimePercentage());
     }
-    
+
     @Test
-    public void timeLeftPercentage() throws Exception {
+    void timeLeftPercentage() throws Exception {
         int expectedTests = 10;
         float expectedTime = 90;
         
@@ -219,9 +218,9 @@ public class TestProgressTest {
 
         assertEquals(67, testProgress.getTimeLeftPercentage());
     }
-    
+
     @Test
-    public void timeLeftPercentageWhenCurrentTestsAreLonger() throws Exception {
+    void timeLeftPercentageWhenCurrentTestsAreLonger() throws Exception {
         int expectedTests = 10;
         float expectedTime = 90;
         
@@ -231,9 +230,9 @@ public class TestProgressTest {
 
         assertEquals(0, testProgress.getTimeLeftPercentage());
     }
-    
+
     @Test
-    public void timeLeftPercentageWhenExpectedIsZero() throws Exception {
+    void timeLeftPercentageWhenExpectedIsZero() throws Exception {
         int expectedTests = 10;
         float expectedTime = 0;
         
@@ -243,9 +242,9 @@ public class TestProgressTest {
 
         assertEquals(0, testProgress.getTimeLeftPercentage());
     }
-    
+
     @Test
-    public void timeLeftPercentageWhenCurrentIsZero() throws Exception {
+    void timeLeftPercentageWhenCurrentIsZero() throws Exception {
         int expectedTests = 2;
         float expectedTime = 90;
         
@@ -255,5 +254,4 @@ public class TestProgressTest {
 
         assertEquals(100, testProgress.getTimeLeftPercentage());
     }
-
 }
