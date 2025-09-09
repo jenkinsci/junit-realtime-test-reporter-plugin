@@ -35,6 +35,7 @@
     <jenkins.version>${jenkins.baseline}.3</jenkins.version>
     <!-- Using JUnit pluggable storage -->
     <useBeta>true</useBeta>
+    <ban-junit4-imports.skip>false</ban-junit4-imports.skip>
   </properties>
 
   <dependencies>
@@ -132,7 +133,7 @@
     </dependency>
     <dependency>
       <groupId>org.mockito</groupId>
-      <artifactId>mockito-core</artifactId>
+      <artifactId>mockito-junit-jupiter</artifactId>
       <scope>test</scope>
     </dependency>
   </dependencies>

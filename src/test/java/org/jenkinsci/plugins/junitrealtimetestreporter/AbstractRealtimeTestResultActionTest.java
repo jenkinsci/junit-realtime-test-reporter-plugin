@@ -23,25 +23,24 @@
  */
 package org.jenkinsci.plugins.junitrealtimetestreporter;
 
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertNull;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.times;
 import static org.mockito.BDDMockito.verify;
-
-import org.junit.Before;
-import org.junit.Test;
-import org.junit.runner.RunWith;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.Spy;
-import org.mockito.junit.MockitoJUnitRunner;
 
 import hudson.Main;
 import hudson.model.Run;
 import hudson.tasks.junit.TestResult;
+import org.mockito.junit.jupiter.MockitoExtension;
 
-@RunWith(MockitoJUnitRunner.class)
-public class AbstractRealtimeTestResultActionTest {
+@ExtendWith(MockitoExtension.class)
+class AbstractRealtimeTestResultActionTest {
 
     @Spy
     private AbstractRealtimeTestResultAction action;
@@ -49,8 +48,8 @@ public class AbstractRealtimeTestResultActionTest {
     @Mock
     private Run<?, ?> run;
 
-    @Before
-    public void init() throws Exception {
+    @BeforeEach
+    void init() throws Exception {
         Main.isUnitTest = true;
         action.run = run;
 
@@ -58,7 +57,7 @@ public class AbstractRealtimeTestResultActionTest {
     }
 
     @Test
-    public void getPreviousResultsOnlyOnce() throws Exception {
+    void getPreviousResultsOnlyOnce() throws Exception {
         int noTimes = 3;
 
         for( int i = 0; i < noTimes; i++) {
@@ -70,14 +69,14 @@ public class AbstractRealtimeTestResultActionTest {
     }
 
     @Test
-    public void progressIsNullWithoutPreviousTestResults() throws Exception {
+    void progressIsNullWithoutPreviousTestResults() throws Exception {
         action.getResult();
         assertNull(action.getTestProgress());
         verify(action).findPreviousTestResult();
     }
 
     @Test
-    public void progressIsCreatedOnCallToGetResults() throws Exception {
+    void progressIsCreatedOnCallToGetResults() throws Exception {
         given(action.findPreviousTestResult()).willReturn(new TestResult());
 
         assertNull(action.getTestProgress());
@@ -85,5 +84,4 @@ public class AbstractRealtimeTestResultActionTest {
         action.getResult();
         assertNotNull(action.getTestProgress());
     }
-
 }

@@ -31,7 +31,6 @@ import hudson.tasks.junit.TestResult;
 import hudson.tasks.junit.TestResultAction;
 import io.jenkins.plugins.junit.storage.JunitTestResultStorageConfiguration;
 import java.util.Arrays;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.logging.Level;
@@ -50,46 +49,39 @@ import org.jenkinsci.plugins.workflow.job.WorkflowJob;
 import org.jenkinsci.plugins.workflow.job.WorkflowRun;
 import org.jenkinsci.plugins.workflow.steps.StepConfigTester;
 import org.jenkinsci.plugins.workflow.test.steps.SemaphoreStep;
-import org.junit.ClassRule;
-import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.junit.runners.Parameterized;
-import org.junit.runners.Parameterized.Parameters;
-import static org.junit.Assert.*;
-import org.junit.Rule;
-import org.jvnet.hudson.test.BuildWatcher;
-import org.jvnet.hudson.test.LoggerRule;
-import org.jvnet.hudson.test.RestartableJenkinsRule;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.RegisterExtension;
+import org.junit.jupiter.params.Parameter;
+import org.junit.jupiter.params.ParameterizedClass;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+import org.junit.jupiter.params.provider.ValueSource;
+import org.jvnet.hudson.test.LogRecorder;
 
 import com.google.common.base.Predicate;
+import org.jvnet.hudson.test.junit.jupiter.BuildWatcherExtension;
+import org.jvnet.hudson.test.junit.jupiter.JenkinsSessionExtension;
 
-@RunWith(Parameterized.class)
-public class RealtimeJUnitStepTest {
+@ParameterizedClass(name = "{index}: use pluggable storage [{0}]")
+@ValueSource(booleans = { false,  true })
+class RealtimeJUnitStepTest {
 
-    @Parameters(name = "{index}: use pluggable storage [{0}]")
-    public static Collection<Object[]> data() {
-        return Arrays.asList(new Object[][] {
-                { false }, { true }
-        });
-    }
-    
-    
-    @ClassRule
-    public static BuildWatcher buildWatcher = new BuildWatcher();
+    @SuppressWarnings("unused")
+    @RegisterExtension
+    private static final BuildWatcherExtension BUILD_WATCHER = new BuildWatcherExtension();
 
-    @Rule
-    public RestartableJenkinsRule rr = new RestartableJenkinsRule();
+    @RegisterExtension
+    private final JenkinsSessionExtension extension = new JenkinsSessionExtension();
 
-    @Rule
-    public LoggerRule logging = new LoggerRule().record(RealtimeJUnitStep.class.getPackage().getName(), Level.FINER);
+    @SuppressWarnings("unused")
+    private final LogRecorder logging = new LogRecorder().record(RealtimeJUnitStep.class.getPackage().getName(), Level.FINER);
 
+    @SuppressWarnings("unused")
+    @Parameter(0)
     private boolean usePluggableStorage;
-    
-    public RealtimeJUnitStepTest(boolean usePluggableStorage) {
-        this.usePluggableStorage = usePluggableStorage;
-    }
 
-    public void autoServer() throws Exception {
+    private void autoServer() {
         if (usePluggableStorage) {
             GlobalDatabaseConfiguration gdc = GlobalDatabaseConfiguration.get();
             gdc.setDatabase(null);
@@ -99,28 +91,29 @@ public class RealtimeJUnitStepTest {
             JunitTestResultStorageConfiguration.get().setStorage(new H2JunitTestResultStorage());
         }
     }
-    
+
     @Test
-    public void smokes() {
-        rr.then(r -> {
+    void smokes() throws Throwable {
+        extension.then(r -> {
                 autoServer();
-                WorkflowJob p = rr.j.jenkins.createProject(WorkflowJob.class, "p");
+                WorkflowJob p = r.jenkins.createProject(WorkflowJob.class, "p");
                 p.setDefinition(new CpsFlowDefinition(
-                    "node {\n" +
-                    "  realtimeJUnit('*.xml') {\n" +
-                    "    semaphore 'pre'\n" +
-                    "    writeFile text: '''<testsuite name='a'><testcase name='a1'/><testcase name='a2'/></testsuite>''', file: 'a.xml'\n" +
-                    "    semaphore 'mid'\n" +
-                    "    writeFile text: '''<testsuite name='b'><testcase name='b1'/><testcase name='b2'><error message='b2 failed'>b2 failed</error></testcase></testsuite>''', file: 'b.xml'\n" +
-                    "    semaphore 'post'\n" +
-                    "  }\n" +
-                    "  deleteDir()\n" +
-                    "}; semaphore 'final'", true));
+                        """
+                                node {
+                                  realtimeJUnit('*.xml') {
+                                    semaphore 'pre'
+                                    writeFile text: '''<testsuite name='a'><testcase name='a1'/><testcase name='a2'/></testsuite>''', file: 'a.xml'
+                                    semaphore 'mid'
+                                    writeFile text: '''<testsuite name='b'><testcase name='b1'/><testcase name='b2'><error message='b2 failed'>b2 failed</error></testcase></testsuite>''', file: 'b.xml'
+                                    semaphore 'post'
+                                  }
+                                  deleteDir()
+                                }; semaphore 'final'""", true));
                 SemaphoreStep.success("pre/1", null);
                 SemaphoreStep.success("mid/1", null);
                 SemaphoreStep.success("post/1", null);
                 SemaphoreStep.success("final/1", null);
-                WorkflowRun b1 = rr.j.assertBuildStatus(Result.UNSTABLE, p.scheduleBuild2(0).get());
+                WorkflowRun b1 = r.assertBuildStatus(Result.UNSTABLE, p.scheduleBuild2(0).get());
                 TestResultAction a = b1.getAction(TestResultAction.class);
                 assertNotNull(a);
                 assertEquals(4, a.getTotalCount());
@@ -132,35 +125,35 @@ public class RealtimeJUnitStepTest {
                 assertNotNull(rta);
                 assertEquals(0, rta.getTotalCount());
                 assertEquals(0, rta.getFailCount());
-                rr.j.assertBuildStatus(null, b2);
+                r.assertBuildStatus(null, b2);
         });
-        rr.then(r -> {
+        extension.then(r -> {
                 autoServer();
-                WorkflowRun b2 = rr.j.jenkins.getItemByFullName("p", WorkflowJob.class).getBuildByNumber(2);
+                WorkflowRun b2 = r.jenkins.getItemByFullName("p", WorkflowJob.class).getBuildByNumber(2);
                 AbstractRealtimeTestResultAction rta = b2.getAction(AbstractRealtimeTestResultAction.class);
                 assertNotNull(rta);
                 assertEquals(0, rta.getTotalCount());
                 assertEquals(0, rta.getFailCount());
-                rr.j.assertBuildStatus(null, b2);
+                r.assertBuildStatus(null, b2);
                 SemaphoreStep.success("pre/2", null);
                 SemaphoreStep.waitForStart("mid/2", b2);
                 rta = b2.getAction(AbstractRealtimeTestResultAction.class);
                 assertNotNull(rta);
                 assertEquals(2, rta.getTotalCount());
                 assertEquals(0, rta.getFailCount());
-                rr.j.assertBuildStatus(null, b2);
+                r.assertBuildStatus(null, b2);
                 SemaphoreStep.success("mid/2", null);
                 SemaphoreStep.waitForStart("post/2", b2);
                 rta = b2.getAction(AbstractRealtimeTestResultAction.class);
                 assertNotNull(rta);
                 assertEquals(4, rta.getTotalCount());
                 assertEquals(1, rta.getFailCount());
-                rr.j.assertBuildStatus(null, b2); // only final JUnitResultArchiver sets it to UNSTABLE
+                r.assertBuildStatus(null, b2); // only final JUnitResultArchiver sets it to UNSTABLE
                 SemaphoreStep.success("post/2", null);
                 SemaphoreStep.waitForStart("final/2", b2);
                 assertEquals(Collections.emptyList(), b2.getActions(AbstractRealtimeTestResultAction.class));
                 SemaphoreStep.success("final/2", null);
-                rr.j.assertBuildStatus(Result.UNSTABLE, rr.j.waitForCompletion(b2));
+                r.assertBuildStatus(Result.UNSTABLE, r.waitForCompletion(b2));
                 TestResultAction a = b2.getAction(TestResultAction.class);
                 assertNotNull(a);
                 assertEquals(4, a.getTotalCount());
@@ -170,20 +163,21 @@ public class RealtimeJUnitStepTest {
     }
 
     @Test
-    public void brokenConnection() {
-        rr.then(r -> {
+    void brokenConnection() throws Throwable {
+        extension.then(r -> {
                 autoServer();
-                DumbSlave s = rr.j.createSlave("remote", null, null);
-                WorkflowJob p = rr.j.jenkins.createProject(WorkflowJob.class, "p");
+                DumbSlave s = r.createSlave("remote", null, null);
+                WorkflowJob p = r.jenkins.createProject(WorkflowJob.class, "p");
                 p.setDefinition(new CpsFlowDefinition(
-                    "node('remote') {\n" +
-                    "  realtimeJUnit('*.xml') {\n" +
-                    "    writeFile text: '''<testsuite name='a'><testcase name='a1'/><testcase name='a2'/></testsuite>''', file: 'a.xml'\n" +
-                    "    writeFile text: '''<testsuite name='b'><testcase name='b1'/><testcase name='b2'><error message='b2 failed'>b2 failed</error></testcase></testsuite>''', file: 'b.xml'\n" +
-                    "    semaphore 'end'\n" +
-                    "    archive 'a.xml'\n" + // should fail, so JUnit archiving will be a suppressed exception; otherwise would be primary
-                    "  }\n" +
-                    "}", true));
+                        """
+                                node('remote') {
+                                  realtimeJUnit('*.xml') {
+                                    writeFile text: '''<testsuite name='a'><testcase name='a1'/><testcase name='a2'/></testsuite>''', file: 'a.xml'
+                                    writeFile text: '''<testsuite name='b'><testcase name='b1'/><testcase name='b2'><error message='b2 failed'>b2 failed</error></testcase></testsuite>''', file: 'b.xml'
+                                    semaphore 'end'
+                                    archive 'a.xml' // should fail, so JUnit archiving will be a suppressed exception; otherwise would be primary
+                                  }
+                                }""", true));
                 WorkflowRun b1 = p.scheduleBuild2(0).waitForStart();
                 SemaphoreStep.waitForStart("end/1", b1);
                 assertNull(b1.getAction(TestResultAction.class));
@@ -193,7 +187,7 @@ public class RealtimeJUnitStepTest {
                 assertEquals(1, rta.getFailCount());
                 s.toComputer().getChannel().close();
                 SemaphoreStep.success("end/1", null);
-                rr.j.assertBuildStatus(Result.FAILURE, rr.j.waitForCompletion(b1));
+                r.assertBuildStatus(Result.FAILURE, r.waitForCompletion(b1));
                 assertEquals(Collections.emptyList(), b1.getActions(AbstractRealtimeTestResultAction.class));
                 TestResultAction a = b1.getAction(TestResultAction.class);
                 assertNotNull(a);
@@ -203,40 +197,41 @@ public class RealtimeJUnitStepTest {
     }
 
     @Test
-    public void ui() {
-        rr.then(r -> {
+    void ui() throws Throwable {
+        extension.then(r -> {
                 autoServer();
-                StepConfigTester t = new StepConfigTester(rr.j);
+                StepConfigTester t = new StepConfigTester(r);
                 RealtimeJUnitStep s = new RealtimeJUnitStep("*.xml");
-                rr.j.assertEqualDataBoundBeans(s, t.configRoundTrip(s));
+                r.assertEqualDataBoundBeans(s, t.configRoundTrip(s));
                 s.setKeepLongStdio(true);
-                rr.j.assertEqualDataBoundBeans(s, t.configRoundTrip(s));
+                r.assertEqualDataBoundBeans(s, t.configRoundTrip(s));
                 s.setStdioRetention("FAILED");
-                rr.j.assertEqualDataBoundBeans(s, t.configRoundTrip(s));
+                r.assertEqualDataBoundBeans(s, t.configRoundTrip(s));
                 s.setSkipMarkingBuildUnstable(true);
-                rr.j.assertEqualDataBoundBeans(s, t.configRoundTrip(s));
+                r.assertEqualDataBoundBeans(s, t.configRoundTrip(s));
         });
     }
 
     @Test
-    public void testResultDetails() {
-        rr.then(r -> {
+    void testResultDetails() throws Throwable {
+        extension.then(r -> {
                 autoServer();
-                WorkflowJob p = rr.j.jenkins.createProject(WorkflowJob.class, "p");
+                WorkflowJob p = r.jenkins.createProject(WorkflowJob.class, "p");
                 p.setDefinition(new CpsFlowDefinition(
-                    "node {\n" +
-                    "  stage('stage1') {\n" +
-                    "    realtimeJUnit('a.xml') {\n" +
-                    "      writeFile text: '''<testsuite name='a'><testcase name='a1'/><testcase name='a2'/></testsuite>''', file: 'a.xml'\n" +
-                    "    }\n" +
-                    "  }\n" +
-                    "  stage('stage2') {\n" +
-                    "    realtimeJUnit('b.xml') {\n" +
-                    "      writeFile text: '''<testsuite name='b'><testcase name='b1'/><testcase name='b2'><error message='b2 failed'>b2 failed</error></testcase></testsuite>''', file: 'b.xml'\n" +
-                    "    }\n" +
-                    "  }\n" +
-                    "}", true));
-                WorkflowRun b1 = rr.j.assertBuildStatus(Result.UNSTABLE, p.scheduleBuild2(0).get());
+                        """
+                                node {
+                                  stage('stage1') {
+                                    realtimeJUnit('a.xml') {
+                                      writeFile text: '''<testsuite name='a'><testcase name='a1'/><testcase name='a2'/></testsuite>''', file: 'a.xml'
+                                    }
+                                  }
+                                  stage('stage2') {
+                                    realtimeJUnit('b.xml') {
+                                      writeFile text: '''<testsuite name='b'><testcase name='b1'/><testcase name='b2'><error message='b2 failed'>b2 failed</error></testcase></testsuite>''', file: 'b.xml'
+                                    }
+                                  }
+                                }""", true));
+                WorkflowRun b1 = r.assertBuildStatus(Result.UNSTABLE, p.scheduleBuild2(0).get());
                 TestResultAction a = b1.getAction(TestResultAction.class);
                 assertNotNull(a);
                 assertEquals(4, a.getTotalCount());
@@ -281,17 +276,19 @@ public class RealtimeJUnitStepTest {
     }
 
     @Test
-    public void skipBuildUnstable() {
-        rr.then(r -> {
+    void skipBuildUnstable() throws Throwable {
+        extension.then(r -> {
             autoServer();
             WorkflowJob j = r.jenkins.createProject(WorkflowJob.class, "currentBuildResultUnstable");
-            j.setDefinition(new CpsFlowDefinition("stage('first') {\n" +
-                    "  node {\n" +
-                    "    realtimeJUnit(testResults: 'b.xml', skipMarkingBuildUnstable: true) {\n" +
-                    "      writeFile text: '''<testsuite name='b'><testcase name='b1'/><testcase name='b2'><error message='b2 failed'>b2 failed</error></testcase></testsuite>''', file: 'b.xml'\n" +
-                    "    }\n" +
-                    "  }\n" +
-                    "}\n", true));
+            j.setDefinition(new CpsFlowDefinition("""
+                    stage('first') {
+                      node {
+                        realtimeJUnit(testResults: 'b.xml', skipMarkingBuildUnstable: true) {
+                          writeFile text: '''<testsuite name='b'><testcase name='b1'/><testcase name='b2'><error message='b2 failed'>b2 failed</error></testcase></testsuite>''', file: 'b.xml'
+                        }
+                      }
+                    }
+                    """, true));
             WorkflowRun run = r.waitForCompletion(j.scheduleBuild2(0).waitForStart());
             r.assertBuildStatus(Result.SUCCESS, run);
             TestResultAction a = run.getAction(TestResultAction.class);
@@ -319,21 +316,22 @@ public class RealtimeJUnitStepTest {
     }
 
     @Test
-    public void testProgressNoStageSingleInstance() {
-        rr.then(r -> {
+    void testProgressNoStageSingleInstance() throws Throwable {
+        extension.then(r -> {
             autoServer();
             WorkflowJob p = r.jenkins.createProject(WorkflowJob.class, "p");
             p.setDefinition(new CpsFlowDefinition(
-                "node {\n" +
-                "  realtimeJUnit('*.xml') {\n" +
-                "    semaphore 'pre'\n" +
-                "    writeFile text: '''<testsuite name='a' time='4'><testcase name='a1' time='1'/><testcase name='a2' time='3'/></testsuite>''', file: 'a.xml'\n" +
-                "    semaphore 'mid'\n" +
-                "    writeFile text: '''<testsuite name='b' time='6'><testcase name='b1' time='2'/><testcase name='b2' time='4'><error message='b2 failed'>b2 failed</error></testcase></testsuite>''', file: 'b.xml'\n" +
-                "    semaphore 'post'\n" +
-                "  }\n" +
-                "  deleteDir()\n" +
-                "}; semaphore 'final'", true));
+                    """
+                            node {
+                              realtimeJUnit('*.xml') {
+                                semaphore 'pre'
+                                writeFile text: '''<testsuite name='a' time='4'><testcase name='a1' time='1'/><testcase name='a2' time='3'/></testsuite>''', file: 'a.xml'
+                                semaphore 'mid'
+                                writeFile text: '''<testsuite name='b' time='6'><testcase name='b1' time='2'/><testcase name='b2' time='4'><error message='b2 failed'>b2 failed</error></testcase></testsuite>''', file: 'b.xml'
+                                semaphore 'post'
+                              }
+                              deleteDir()
+                            }; semaphore 'final'""", true));
             SemaphoreStep.success("pre/1", null);
             SemaphoreStep.success("mid/1", null);
             SemaphoreStep.success("post/1", null);
@@ -388,35 +386,36 @@ public class RealtimeJUnitStepTest {
     }
 
     @Test
-    public void testProgressParallelStagesAndRestart() {
-        rr.then(r -> {
+    void testProgressParallelStagesAndRestart() throws Throwable {
+        extension.then(r -> {
             autoServer();
             WorkflowJob p = r.jenkins.createProject(WorkflowJob.class, "p");
             p.setDefinition(new CpsFlowDefinition(
-                "node {\n" +
-                "  parallel('firstBranch': {\n" +
-                "    stage('stage1') {\n" +
-                "      realtimeJUnit('stage1_*.xml') {\n" +
-                "        semaphore 'pre1'\n" +
-                "        writeFile text: '''<testsuite name='a' time='4'><testcase name='a1' time='1'/><testcase name='a2' time='3'/></testsuite>''', file: 'stage1_a.xml'\n" +
-                "        semaphore 'mid1'\n" +
-                "        writeFile text: '''<testsuite name='b' time='6'><testcase name='b1' time='2'/><testcase name='b2' time='4'><error message='b2 failed'>b2 failed</error></testcase></testsuite>''', file: 'stage1_b.xml'\n" +
-                "        semaphore 'post1'\n" +
-                "      }\n" +
-                "    }\n" +
-                "  }, 'secondBranch': {\n" +
-                "    stage('stage2') {\n" +
-                "      realtimeJUnit('stage2_*.xml') {\n" +
-                "        semaphore 'pre2'\n" +
-                "        writeFile text: '''<testsuite name='c' time='12'><testcase name='c1' time='4'/><testcase name='c2' time='5'/><testcase name='c3' time='3'/></testsuite>''', file: 'stage2_c.xml'\n" +
-                "        semaphore 'mid2'\n" +
-                "        writeFile text: '''<testsuite name='d' time='16'><testcase name='d1' time='7'/><testcase name='d2' time='9'><error message='d2 failed'>d2 failed</error></testcase></testsuite>''', file: 'stage2_d.xml'\n" +
-                "        semaphore 'post2'\n" +
-                "      }\n" +
-                "    }\n" +
-                "  })\n" +
-                "  deleteDir()\n" +
-                "}; semaphore 'final'", true));
+                    """
+                            node {
+                              parallel('firstBranch': {
+                                stage('stage1') {
+                                  realtimeJUnit('stage1_*.xml') {
+                                    semaphore 'pre1'
+                                    writeFile text: '''<testsuite name='a' time='4'><testcase name='a1' time='1'/><testcase name='a2' time='3'/></testsuite>''', file: 'stage1_a.xml'
+                                    semaphore 'mid1'
+                                    writeFile text: '''<testsuite name='b' time='6'><testcase name='b1' time='2'/><testcase name='b2' time='4'><error message='b2 failed'>b2 failed</error></testcase></testsuite>''', file: 'stage1_b.xml'
+                                    semaphore 'post1'
+                                  }
+                                }
+                              }, 'secondBranch': {
+                                stage('stage2') {
+                                  realtimeJUnit('stage2_*.xml') {
+                                    semaphore 'pre2'
+                                    writeFile text: '''<testsuite name='c' time='12'><testcase name='c1' time='4'/><testcase name='c2' time='5'/><testcase name='c3' time='3'/></testsuite>''', file: 'stage2_c.xml'
+                                    semaphore 'mid2'
+                                    writeFile text: '''<testsuite name='d' time='16'><testcase name='d1' time='7'/><testcase name='d2' time='9'><error message='d2 failed'>d2 failed</error></testcase></testsuite>''', file: 'stage2_d.xml'
+                                    semaphore 'post2'
+                                  }
+                                }
+                              })
+                              deleteDir()
+                            }; semaphore 'final'""", true));
             SemaphoreStep.success("pre1/1", null);
             SemaphoreStep.success("pre2/1", null);
             SemaphoreStep.success("mid1/1", null);
@@ -431,9 +430,9 @@ public class RealtimeJUnitStepTest {
             SemaphoreStep.waitForStart("pre1/2", b2);
             SemaphoreStep.waitForStart("pre2/2", b2);
         });
-        rr.then(r -> {
+        extension.then(r -> {
             autoServer();
-            WorkflowRun b2 = rr.j.jenkins.getItemByFullName("p", WorkflowJob.class).getBuildByNumber(2);
+            WorkflowRun b2 = r.jenkins.getItemByFullName("p", WorkflowJob.class).getBuildByNumber(2);
             List<AbstractRealtimeTestResultAction> actions = b2.getActions(AbstractRealtimeTestResultAction.class);
             assertEquals(2, actions.size());
             
@@ -526,17 +525,19 @@ public class RealtimeJUnitStepTest {
         });
     }
 
-
     private static class BlockNamePredicate implements Predicate<FlowNode> {
+
         private final String blockName;
+
         public BlockNamePredicate(@NonNull String blockName) {
             this.blockName = blockName;
         }
+
         @Override
         public boolean apply(@Nullable FlowNode input) {
             if (input != null) {
                 LabelAction labelAction = input.getPersistentAction(LabelAction.class);
-                if (labelAction != null && labelAction instanceof ThreadNameAction) {
+                if (labelAction instanceof ThreadNameAction) {
                 	return blockName.equals(((ThreadNameAction) labelAction).getThreadName());
                 }
                 return labelAction != null && blockName.equals(labelAction.getDisplayName());
@@ -546,10 +547,13 @@ public class RealtimeJUnitStepTest {
     }
 
     private static class FunctionNamePredicate implements Predicate<FlowNode> {
+
         private final String functionName;
+
         public FunctionNamePredicate(@NonNull String functionName) {
             this.functionName = functionName;
         }
+
         @Override
         public boolean apply(@Nullable FlowNode input) {
             if (input != null) {
